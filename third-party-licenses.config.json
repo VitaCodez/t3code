@@ -154,6 +154,24 @@
   "packageOverrides": [
     {
       "license": "MIT",
+      "name": "rehype-katex",
+      "sourceUrl": "https://github.com/remarkjs/remark-math/tree/main/packages/rehype-katex",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2018 Junyoung Choi <fluke8259@gmail.com>"]
+      }
+    },
+    {
+      "license": "MIT",
+      "name": "remark-math",
+      "sourceUrl": "https://github.com/remarkjs/remark-math/tree/main/packages/remark-math",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) 2018 Junyoung Choi <fluke8259@gmail.com>"]
+      }
+    },
+    {
+      "license": "MIT",
       "name": "@react-grab/cli",
       "sourceUrl": "https://github.com/aidenybai/react-grab/tree/main/packages/cli",
       "generatedNotice": {

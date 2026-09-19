@@ -1011,6 +1011,12 @@ export const WINDOWS_SERVER_ASAR_RESOURCE = "server.asar";
 // asar redirect convention). Everything else stays packed.
 export const WINDOWS_NATIVE_ASAR_UNPACK_GLOB =
   "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib}";
+// For @electron/asar createPackageWithOptions, unpack is evaluated with minimatch
+// using { matchBase: true }. If the pattern contains slashes, minimatch matches
+// against the full absolute path with dot: false, which fails if any parent directory
+// starts with a dot (e.g. .t3, .github, .cache). Omitting path separators allows
+// matchBase: true to match just the basename of native files.
+export const WINDOWS_SERVER_ASAR_UNPACK_GLOB = "*.{node,dll,exe,so,dylib,so.*}";
 // Mirrors DESKTOP_FILE_EXCLUSIONS for the hand-packed sidecar: the Claude SDK
 // platform packages are dead weight (see above), and node_modules/.bin shims
 // are never spawned at runtime (and are symlinks on POSIX build hosts, which
@@ -2880,7 +2886,7 @@ export const packWindowsServerAsar = Effect.fn("packWindowsServerAsar")(function
     try: () =>
       createPackageWithOptions(input.sourceDir, input.asarPath, {
         dot: true,
-        unpack: WINDOWS_NATIVE_ASAR_UNPACK_GLOB,
+        unpack: WINDOWS_SERVER_ASAR_UNPACK_GLOB,
         // glob 13 (via @electron/asar 4) matches `ignore` relative to `cwd`,
         // not against the absolute paths it crawls, so anchor it at the source.
         globOptions: {
