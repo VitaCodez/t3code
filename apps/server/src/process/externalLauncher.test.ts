@@ -501,14 +501,16 @@ it.effect.skipIf(windowsHost)("preserves existing paths ending in digit suffixes
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const binDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-editors-" });
-    const xdgOpenPath = path.join(binDir, "xdg-open");
-    yield* fileSystem.writeFileString(xdgOpenPath, "#!/bin/sh\n");
-    yield* fileSystem.chmod(xdgOpenPath, 0o755);
+    for (const name of ["xdg-open", "xdg-mime"]) {
+      const filePath = path.join(binDir, name);
+      yield* fileSystem.writeFileString(filePath, "#!/bin/sh\n");
+      yield* fileSystem.chmod(filePath, 0o755);
+    }
 
     const testFilePath = path.join(binDir, "release:42");
     yield* fileSystem.writeFileString(testFilePath, "binary-content");
 
-    let spawned: ChildProcess.StandardCommand | undefined;
+    const spawnedCommands: ChildProcess.StandardCommand[] = [];
     yield* Effect.gen(function* () {
       const launcher = yield* ExternalLauncher.ExternalLauncher;
       yield* launcher.launchEditor({
@@ -521,14 +523,16 @@ it.effect.skipIf(windowsHost)("preserves existing paths ending in digit suffixes
           platform: "linux",
           env: { PATH: binDir, DISPLAY: ":0" },
           onSpawn: (command) => {
-            spawned = command;
+            spawnedCommands.push(command);
           },
+          spawnResult: (command) =>
+            command.command === "xdg-mime" ? { stdout: "org.gnome.Nautilus.desktop\n" } : undefined,
         }),
       ),
     );
 
+    const spawned = spawnedCommands.find((command) => command.command === "xdg-open");
     assert.ok(spawned);
-    assert.equal(spawned.command, "xdg-open");
     assert.deepEqual(spawned.args, [testFilePath]);
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
