@@ -549,18 +549,34 @@ const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
     return yield* new ExternalLauncherUnsupportedEditorError({ editor: input.editor });
   }
 
-  if (input.reveal === true) {
-    return yield* resolveFileManagerRevealLaunch(input.cwd, platform, env, command);
+  const cleanTarget = Option.match(parseTargetPathAndPosition(input.cwd), {
+    onNone: () => input.cwd,
+    onSome: (pos) => pos.path,
+  });
+
+  const fileSystem = yield* FileSystem.FileSystem;
+  const isFile = yield* fileSystem.stat(cleanTarget).pipe(
+    Effect.map((info) => info.type === "File"),
+    Effect.orElseSucceed(() => false),
+  );
+
+  if (input.reveal === true || isFile) {
+    return yield* resolveFileManagerRevealLaunch(cleanTarget, platform, env, command);
   }
+
+  const target =
+    platform === "win32" || (command === "explorer.exe" && env.WSL_DISTRO_NAME === undefined)
+      ? normalizeWindowsFileManagerPath(cleanTarget)
+      : cleanTarget;
 
   return {
     editor: editorDef.id,
-    target: input.cwd,
+    target: cleanTarget,
     command,
     args:
       command === "explorer.exe" && env.WSL_DISTRO_NAME !== undefined
-        ? [resolveWslFileManagerPath(input.cwd, env.WSL_DISTRO_NAME)]
-        : [input.cwd],
+        ? [resolveWslFileManagerPath(cleanTarget, env.WSL_DISTRO_NAME)]
+        : [target],
   };
 });
 
