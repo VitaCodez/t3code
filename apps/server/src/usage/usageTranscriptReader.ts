@@ -20,6 +20,7 @@ import * as NodePath from "node:path";
 
 import type { UsageProviderKind } from "@t3tools/contracts";
 
+import { readAntigravityDatabaseRecords } from "./usageAntigravityDatabase.ts";
 import {
   initialAntigravityScanState,
   initialCodexScanState,
@@ -88,8 +89,13 @@ function fnv1a(buffer: Buffer): number {
   return hash >>> 0;
 }
 
+export interface ListTranscriptFilesOptions {
+  readonly fileName?: string;
+  readonly extensions?: readonly string[];
+}
+
 /**
- * Lists `.jsonl` transcripts under `root` last modified at or after `sinceMs`.
+ * Lists `.jsonl` or `.db` transcripts under `root` last modified at or after `sinceMs`.
  *
  * Errors on individual entries are swallowed: session files rotate and get
  * removed while the walk is in flight, and a partial listing is far better than
@@ -102,10 +108,11 @@ function fnv1a(buffer: Buffer): number {
 export async function listTranscriptFiles(
   root: string,
   sinceMs: number,
-  options?: { readonly fileName?: string },
+  options?: ListTranscriptFilesOptions,
 ): Promise<readonly TranscriptFile[]> {
   const found: TranscriptFile[] = [];
   const fileName = options?.fileName;
+  const extensions = options?.extensions;
 
   const walk = async (dir: string): Promise<void> => {
     let entries;
@@ -120,8 +127,17 @@ export async function listTranscriptFiles(
         await walk(child);
         continue;
       }
+      if (
+        entry.name.endsWith("-wal") ||
+        entry.name.endsWith("-shm") ||
+        entry.name.endsWith("-journal")
+      ) {
+        continue;
+      }
       if (fileName !== undefined) {
         if (entry.name !== fileName) continue;
+      } else if (extensions !== undefined) {
+        if (!extensions.some((ext) => entry.name.endsWith(ext))) continue;
       } else if (!entry.name.endsWith(".jsonl")) {
         continue;
       }
@@ -197,6 +213,22 @@ export async function readTranscriptRecords(
   provider: UsageProviderKind,
   resumeFrom?: TranscriptParsePosition,
 ): Promise<TranscriptParseResult | null> {
+  if (provider === "antigravity" && filePath.endsWith(".db")) {
+    const records = readAntigravityDatabaseRecords(filePath);
+    if (records === null) return null;
+    return {
+      records,
+      tailRecords: [],
+      position: {
+        resumeOffset: 0,
+        guardLength: 0,
+        guardHash: 0,
+        codexState: null,
+      },
+      resumed: false,
+    };
+  }
+
   let handle: NodeFSP.FileHandle;
   try {
     handle = await NodeFSP.open(filePath, "r");

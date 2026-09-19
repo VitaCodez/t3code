@@ -102,6 +102,7 @@ const serviceLayers = (input: {
     Layer.provideMerge(
       Layer.succeed(HostProcessEnvironment, {
         GROK_HOME: NodePath.join(input.home, "grok"),
+        ANTIGRAVITY_HOME: NodePath.join(input.home, "antigravity"),
         ...input.environment,
       }),
     ),

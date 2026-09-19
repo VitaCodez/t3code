@@ -327,6 +327,7 @@ export const make = Effect.gen(function* () {
       dir: string;
       volumeId: string;
       fileName?: string;
+      extensions?: readonly string[];
     }> = [];
     const seen = new Set<string>();
     for (const driver of ["claudeAgent", "codex", "grok", "antigravity"] as const) {
@@ -334,13 +335,20 @@ export const make = Effect.gen(function* () {
       // the legacy settings, just as they do in the provider registry.
       const instances: Array<Pick<ProviderInstanceConfig, "config" | "environment">> =
         Object.values(settings.providerInstances).filter((instance) => instance.driver === driver);
-      if (!Object.hasOwn(settings.providerInstances, driver)) {
+      if (
+        !Object.hasOwn(settings.providerInstances, driver) &&
+        settings.providers[driver] !== undefined
+      ) {
         instances.push({ config: settings.providers[driver] });
       }
       for (const instance of instances) {
         const environment = mergeProviderInstanceEnvironment(instance.environment, hostEnvironment);
         const provider = driver === "claudeAgent" ? "claude" : driver;
-        let directory: string;
+        const targets: Array<{
+          dir: string;
+          fileName?: string;
+          extensions?: readonly string[];
+        }> = [];
         if (driver === "codex") {
           const decoded = decodeCodexSettings(instance.config ?? {});
           if (Option.isNone(decoded)) continue;
@@ -351,7 +359,7 @@ export const make = Effect.gen(function* () {
               ? { ...config, homePath: environmentHome }
               : config,
           );
-          directory = path.resolve(layout.sharedHomePath, "sessions");
+          targets.push({ dir: path.resolve(layout.sharedHomePath, "sessions") });
         } else if (driver === "claudeAgent") {
           const decoded = decodeClaudeSettings(instance.config ?? {});
           if (Option.isNone(decoded)) continue;
@@ -359,60 +367,88 @@ export const make = Effect.gen(function* () {
           const home = configured
             ? expandHomePath(configured)
             : environment.CLAUDE_CONFIG_DIR?.trim() || path.join(NodeOS.homedir(), ".claude");
-          directory = path.resolve(home, "projects");
+          targets.push({ dir: path.resolve(home, "projects") });
         } else if (driver === "antigravity") {
           const antigravityHomeEnv =
             (environment.ANTIGRAVITY_HOME ?? hostEnvironment["ANTIGRAVITY_HOME"])?.trim() ?? "";
-          const antigravityHome =
-            antigravityHomeEnv.length > 0
-              ? path.resolve(expandHomePath(antigravityHomeEnv))
-              : path.join(NodeOS.homedir(), ".gemini", "antigravity-cli");
-          directory = path.resolve(antigravityHome, "brain");
+          if (antigravityHomeEnv.length > 0) {
+            const home = path.resolve(expandHomePath(antigravityHomeEnv));
+            targets.push({ dir: path.resolve(home, "brain"), fileName: "transcript.jsonl" });
+            targets.push({ dir: path.resolve(home, "conversations"), extensions: [".db"] });
+          } else {
+            // Check T3 Code's managed Antigravity profile directories
+            const providersDir = path.join(config.stateDir, "providers", "antigravity");
+            const profileEntries = yield* fileSystem
+              .readDirectory(providersDir)
+              .pipe(Effect.orElseSucceed(() => []));
+            for (const entry of profileEntries) {
+              targets.push({
+                dir: path.join(providersDir, entry, "antigravity-acp", "conversations"),
+                extensions: [".db"],
+              });
+              targets.push({
+                dir: path.join(providersDir, entry, "antigravity-acp", "brain"),
+                fileName: "transcript.jsonl",
+              });
+            }
+            // Standard external Antigravity directories
+            for (const sub of ["antigravity", "antigravity-cli", "antigravity-ide"]) {
+              targets.push({
+                dir: path.join(NodeOS.homedir(), ".gemini", sub, "brain"),
+                fileName: "transcript.jsonl",
+              });
+              targets.push({
+                dir: path.join(NodeOS.homedir(), ".gemini", sub, "conversations"),
+                extensions: [".db"],
+              });
+            }
+          }
         } else {
           const home = expandHomePath(
             environment.GROK_HOME?.trim() || path.join(NodeOS.homedir(), ".grok"),
           );
-          directory = path.resolve(home, "sessions");
+          targets.push({ dir: path.resolve(home, "sessions"), fileName: "updates.jsonl" });
         }
-        const sourceKey = provider + "\0" + directory;
-        const previous = sourceCache.get(sourceKey);
-        // Keep canonical paths and source fingerprints stable after root cleanup,
-        // including aliases and clients merging pre-cleanup environment summaries.
-        const dir = yield* fileSystem
-          .realPath(directory)
-          .pipe(Effect.orElseSucceed(() => previous?.dir ?? directory));
-        const currentVolumeId = yield* Effect.promise(() => readDirectoryVolumeId(dir));
-        const hasRetainedHistory = fileCache
-          .entries()
-          .some(
-            ([filePath, entry]) =>
-              entry.provider === provider &&
-              entry.mtimeMs >= retentionCutoffMs &&
-              entry.records.length + entry.tailRecords.length > 0 &&
-              isWithinDirectory(filePath, dir),
-          );
-        // A recreated directory still reports the retained history under its old identity.
-        const volumeId =
-          previous?.dir === dir && (hasRetainedHistory || !currentVolumeId)
-            ? previous.volumeId || currentVolumeId
-            : currentVolumeId;
-        if (previous?.dir !== dir || previous.volumeId !== volumeId) {
-          sourceCache.set(sourceKey, { dir, volumeId });
-          cacheDirty = true;
+
+        for (const target of targets) {
+          const directory = target.dir;
+          const sourceKey = provider + "\0" + directory;
+          const previous = sourceCache.get(sourceKey);
+          // Keep canonical paths and source fingerprints stable after root cleanup,
+          // including aliases and clients merging pre-cleanup environment summaries.
+          const dir = yield* fileSystem
+            .realPath(directory)
+            .pipe(Effect.orElseSucceed(() => previous?.dir ?? directory));
+          const currentVolumeId = yield* Effect.promise(() => readDirectoryVolumeId(dir));
+          const hasRetainedHistory = fileCache
+            .entries()
+            .some(
+              ([filePath, entry]) =>
+                entry.provider === provider &&
+                entry.mtimeMs >= retentionCutoffMs &&
+                entry.records.length + entry.tailRecords.length > 0 &&
+                isWithinDirectory(filePath, dir),
+            );
+          // A recreated directory still reports the retained history under its old identity.
+          const volumeId =
+            previous?.dir === dir && (hasRetainedHistory || !currentVolumeId)
+              ? previous.volumeId || currentVolumeId
+              : currentVolumeId;
+          if (previous?.dir !== dir || previous.volumeId !== volumeId) {
+            sourceCache.set(sourceKey, { dir, volumeId });
+            cacheDirty = true;
+          }
+          const key = `${provider}\0${dir}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          dirs.push({
+            provider,
+            dir,
+            volumeId,
+            ...(target.fileName !== undefined ? { fileName: target.fileName } : {}),
+            ...(target.extensions !== undefined ? { extensions: target.extensions } : {}),
+          });
         }
-        const key = `${provider}\0${dir}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        dirs.push({
-          provider,
-          dir,
-          volumeId,
-          ...(provider === "grok"
-            ? { fileName: "updates.jsonl" }
-            : provider === "antigravity"
-              ? { fileName: "transcript.jsonl" }
-              : {}),
-        });
       }
     }
     return dirs;
@@ -545,7 +581,7 @@ export const make = Effect.gen(function* () {
       Effect.provideService(Path.Path, path),
     );
     const scanned: ScannedDir[] = [];
-    for (const { provider, dir, volumeId, fileName } of dirs) {
+    for (const { provider, dir, volumeId, fileName, extensions } of dirs) {
       const exists = yield* fileSystem
         .exists(dir)
         .pipe(Effect.catchCause(() => Effect.succeed(false)));
@@ -554,7 +590,16 @@ export const make = Effect.gen(function* () {
         continue;
       }
       const files = yield* Effect.promise(() =>
-        listTranscriptFiles(dir, windowStartMs, fileName === undefined ? undefined : { fileName }),
+        listTranscriptFiles(
+          dir,
+          windowStartMs,
+          fileName !== undefined || extensions !== undefined
+            ? {
+                ...(fileName !== undefined ? { fileName } : {}),
+                ...(extensions !== undefined ? { extensions } : {}),
+              }
+            : undefined,
+        ),
       );
       const parsedFiles: { path: string; records: readonly UsageRecord[] }[] = [];
       for (const file of files) {
