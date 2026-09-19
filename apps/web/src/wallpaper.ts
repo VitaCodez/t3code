@@ -63,6 +63,9 @@ export const WALLPAPER_PRESET_DEFINITIONS: Readonly<
   },
 };
 
+export const GOOGLE_RETRO_FONTS_URL =
+  "https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=VT323&display=swap";
+
 export const RETRO_FONT_DEFINITIONS: Readonly<
   Record<
     RetroFontPreset,
@@ -76,17 +79,17 @@ export const RETRO_FONT_DEFINITIONS: Readonly<
   },
   vt323: {
     label: "VT323",
-    family: "'VT323', monospace",
+    family: "'VT323', 'Courier New', 'Lucida Console', monospace",
     description: "Vintage CRT phosphor terminal typeface",
   },
   "press-start": {
     label: "Press Start 2P",
-    family: "'Press Start 2P', monospace",
+    family: "'Press Start 2P', 'Small Fonts', 'Fixedsys', monospace",
     description: "Classic 8-bit arcade pixel font",
   },
   silkscreen: {
     label: "Silkscreen",
-    family: "'Silkscreen', monospace",
+    family: "'Silkscreen', 'Monaco', 'Consolas', monospace",
     description: "Clean modern geometric pixel typeface",
   },
   "retro-code": {

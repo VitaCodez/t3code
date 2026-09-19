@@ -36,7 +36,11 @@ import {
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { applyAppearanceFontVariables } from "~/appearanceFonts";
-import { RETRO_FONT_DEFINITIONS, resolveWallpaperAccent } from "~/wallpaper";
+import {
+  GOOGLE_RETRO_FONTS_URL,
+  RETRO_FONT_DEFINITIONS,
+  resolveWallpaperAccent,
+} from "~/wallpaper";
 import { applyAppearanceContrast } from "~/appearanceContrast";
 import { useClientSettings } from "../hooks/useSettings";
 import { PlanAgentSelectionHeal } from "../planAgentSelectionHeal";
@@ -282,6 +286,17 @@ function RetroFontAppearanceSync() {
       delete root.dataset.retroFont;
       root.style.removeProperty("--retro-font-family");
       return;
+    }
+
+    if (retroFontPreset !== "retro-code") {
+      const linkId = "t3code-retro-fonts-stylesheet";
+      if (!document.getElementById(linkId)) {
+        const link = document.createElement("link");
+        link.id = linkId;
+        link.rel = "stylesheet";
+        link.href = GOOGLE_RETRO_FONTS_URL;
+        document.head.appendChild(link);
+      }
     }
 
     root.dataset.retroFont = retroFontPreset;

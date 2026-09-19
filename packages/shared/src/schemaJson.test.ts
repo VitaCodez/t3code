@@ -151,4 +151,18 @@ Done.`),
     expect(diagnostic.length).toBeLessThanOrEqual(2_048);
     expect(diagnostic.endsWith("\n... and 2 more issue(s)")).toBe(true);
   });
+
+  it("decodes large string values without call stack overflow", () => {
+    const largePayload = "data:image/png;base64," + "A".repeat(2_000_000);
+    // Test strict JSON fast path
+    expect(decodeLenientJson(JSON.stringify({ wallpaper: largePayload }))).toEqual({
+      wallpaper: largePayload,
+    });
+
+    // Test lenient fallback with comments and trailing commas
+    const lenientWithLargePayload = `{\n  // large asset\n  "wallpaper": ${JSON.stringify(largePayload)},\n}`;
+    expect(decodeLenientJson(lenientWithLargePayload)).toEqual({
+      wallpaper: largePayload,
+    });
+  });
 });

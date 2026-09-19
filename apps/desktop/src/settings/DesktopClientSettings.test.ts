@@ -313,4 +313,35 @@ describe("DesktopClientSettings", () => {
       ),
     );
   }
+
+  it.effect(
+    "loads settings containing large string values (such as custom wallpapers) without error",
+    () =>
+      withClientSettings(
+        Effect.gen(function* () {
+          const settings = yield* DesktopClientSettings.DesktopClientSettings;
+          const environment = yield* DesktopEnvironment.DesktopEnvironment;
+          const fileSystem = yield* FileSystem.FileSystem;
+          const largeWallpaper = "data:image/jpeg;base64," + "B".repeat(2_000_000);
+          const settingsWithLargeWallpaper: ClientSettings = {
+            ...clientSettings,
+            wallpaperMode: "custom",
+            wallpaperCustomUrl: largeWallpaper,
+          };
+
+          yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+          yield* fileSystem.writeFileString(
+            environment.clientSettingsPath,
+            JSON.stringify(settingsWithLargeWallpaper),
+          );
+
+          const loaded = yield* settings.get;
+          assert.isTrue(Option.isSome(loaded));
+          if (Option.isSome(loaded)) {
+            assert.equal(loaded.value.wallpaperMode, "custom");
+            assert.equal(loaded.value.wallpaperCustomUrl, largeWallpaper);
+          }
+        }),
+      ),
+  );
 });

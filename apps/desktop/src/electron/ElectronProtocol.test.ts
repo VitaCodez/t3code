@@ -69,7 +69,7 @@ describe("ElectronProtocol", () => {
           );
           assert.include(
             response.headers.get("content-security-policy") ?? "",
-            "font-src 'self' t3code-dev: data:",
+            "font-src 'self' t3code-dev: data: https://fonts.gstatic.com",
           );
         }),
       );
@@ -226,6 +226,11 @@ describe("ElectronProtocol", () => {
       "https:",
     ]);
     assert.deepEqual(directives["media-src"], ["'self'", "t3code:", "blob:", "http:", "https:"]);
-    assert.deepEqual(directives["font-src"], ["'self'", "t3code:", "data:"]);
+    assert.deepEqual(directives["font-src"], [
+      "'self'",
+      "t3code:",
+      "data:",
+      "https://fonts.gstatic.com",
+    ]);
   });
 });

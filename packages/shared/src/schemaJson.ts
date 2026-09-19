@@ -164,33 +164,105 @@ export const formatSchemaError = (cause: Cause.Cause<Schema.SchemaError>) => {
  */
 const decodeJsonString = Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown));
 
-const parseLenientJsonGetter = SchemaGetter.onSome((input: string) => {
-  // Strip single-line comments - alternation preserves quoted strings.
-  let stripped = input.replace(
-    /("(?:[^"\\]|\\.)*")|\/\/[^\n]*/g,
-    (match, stringLiteral: string | undefined) => (stringLiteral ? match : ""),
-  );
+export function stripCommentsAndTrailingCommas(input: string): string {
+  const len = input.length;
+  let result = "";
+  let lastSliceStart = 0;
+  let inString = false;
+  let escaping = false;
 
-  // Strip multi-line comments.
-  stripped = stripped.replace(
-    /("(?:[^"\\]|\\.)*")|\/\*[\s\S]*?\*\//g,
-    (match, stringLiteral: string | undefined) => (stringLiteral ? match : ""),
-  );
+  for (let i = 0; i < len; i += 1) {
+    const char = input[i];
 
-  // Strip trailing commas before `}` or `]`. The alternation preserves quoted
-  // strings so a comma inside a string value (e.g. `{"note":"a,]"}`) is not
-  // mistaken for a trailing comma and removed.
-  stripped = stripped.replace(
-    /("(?:[^"\\]|\\.)*")|,(\s*[}\]])/g,
-    (match, stringLiteral: string | undefined, bracket: string | undefined) =>
-      stringLiteral ? match : (bracket ?? ""),
-  );
+    if (inString) {
+      if (escaping) {
+        escaping = false;
+      } else if (char === "\\") {
+        escaping = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
 
-  return decodeJsonString(stripped).pipe(
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    // Single-line comment: //
+    if (char === "/" && i + 1 < len && input[i + 1] === "/") {
+      result += input.slice(lastSliceStart, i);
+      i += 2;
+      while (i < len && input[i] !== "\n" && input[i] !== "\r") {
+        i += 1;
+      }
+      lastSliceStart = i;
+      continue;
+    }
+
+    // Multi-line comment: /* ... */
+    if (char === "/" && i + 1 < len && input[i + 1] === "*") {
+      result += input.slice(lastSliceStart, i);
+      i += 2;
+      while (i + 1 < len && !(input[i] === "*" && input[i + 1] === "/")) {
+        i += 1;
+      }
+      i = Math.min(i + 2, len);
+      lastSliceStart = i;
+      i -= 1;
+      continue;
+    }
+
+    // Trailing comma before } or ]
+    if (char === ",") {
+      let j = i + 1;
+      let nextChar = "";
+      while (j < len) {
+        const c = input[j];
+        if (c === " " || c === "\t" || c === "\n" || c === "\r") {
+          j += 1;
+          continue;
+        }
+        if (c === "/" && j + 1 < len && input[j + 1] === "/") {
+          j += 2;
+          while (j < len && input[j] !== "\n" && input[j] !== "\r") {
+            j += 1;
+          }
+          continue;
+        }
+        if (c === "/" && j + 1 < len && input[j + 1] === "*") {
+          j += 2;
+          while (j + 1 < len && !(input[j] === "*" && input[j + 1] === "/")) {
+            j += 1;
+          }
+          j = Math.min(j + 2, len);
+          continue;
+        }
+        nextChar = c;
+        break;
+      }
+      if (nextChar === "}" || nextChar === "]") {
+        result += input.slice(lastSliceStart, i);
+        lastSliceStart = i + 1;
+      }
+    }
+  }
+
+  if (lastSliceStart < len) {
+    result += input.slice(lastSliceStart);
+  }
+
+  return result;
+}
+
+const parseLenientJsonGetter = SchemaGetter.onSome((input: string) =>
+  decodeJsonString(input).pipe(
+    Effect.catch(() => decodeJsonString(stripCommentsAndTrailingCommas(input))),
     Effect.map(Option.some),
     Effect.mapError((error) => error.issue),
-  );
-});
+  ),
+);
 
 /**
  * Schema transformation: lenient JSONC string ↔ unknown.
