@@ -139,7 +139,12 @@ export function partitionStashAttachments(
  */
 function resolveBaseStorage(): { storage: StateStorage; durable: boolean } {
   try {
-    if (typeof localStorage !== "undefined") {
+    if (
+      typeof localStorage !== "undefined" &&
+      typeof localStorage.getItem === "function" &&
+      typeof localStorage.setItem === "function" &&
+      typeof localStorage.removeItem === "function"
+    ) {
       return { storage: localStorage, durable: true };
     }
   } catch {

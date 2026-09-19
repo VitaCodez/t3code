@@ -527,6 +527,7 @@ const CHAT_MARKDOWN_REMARK_PLUGINS = [
   remarkGfm,
   remarkGithubAlerts,
   remarkMath,
+  remarkFilterInvalidInlineMath,
   remarkNormalizeListItemIndentation,
   remarkCodexDirectives,
   remarkPreserveCodeMeta,
@@ -537,6 +538,7 @@ const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS = [
   remarkGfm,
   remarkGithubAlerts,
   remarkMath,
+  remarkFilterInvalidInlineMath,
   remarkNormalizeListItemIndentation,
   remarkCodexDirectives,
   remarkBreaks,
@@ -627,6 +629,7 @@ function extractPreCodeMeta(node: unknown): string | undefined {
 
 type MarkdownAstNode = {
   type?: string;
+  value?: string;
   meta?: unknown;
   url?: string;
   data?: {
@@ -634,6 +637,41 @@ type MarkdownAstNode = {
   };
   children?: MarkdownAstNode[];
 };
+
+function remarkFilterInvalidInlineMath() {
+  return (tree: MarkdownAstNode) => {
+    const visit = (node: MarkdownAstNode) => {
+      if (node.children) {
+        for (const child of node.children) {
+          if (!child) continue;
+          if (
+            child.type === "inlineMath" &&
+            typeof child.value === "string" &&
+            (/^\s|\s$/.test(child.value) || child.value.includes("\n"))
+          ) {
+            delete child.data;
+            child.type = "text";
+            child.value = "$" + child.value + "$";
+          } else {
+            visit(child);
+          }
+        }
+        const merged: MarkdownAstNode[] = [];
+        for (const child of node.children) {
+          if (!child) continue;
+          const prev = merged[merged.length - 1];
+          if (prev && prev.type === "text" && child.type === "text") {
+            prev.value = (prev.value ?? "") + (child.value ?? "");
+          } else {
+            merged.push(child);
+          }
+        }
+        node.children = merged;
+      }
+    };
+    visit(tree);
+  };
+}
 
 function remarkPreserveCodeMeta() {
   return (tree: MarkdownAstNode) => {
