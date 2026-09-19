@@ -1,3 +1,5 @@
+import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
+import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
 import { Spinner } from "~/components/ui/spinner";
 import {
   ArchiveIcon,
@@ -79,6 +81,8 @@ import { useOpenPrLink } from "../lib/openPullRequestLink";
 import { releaseProjectDraftUploads } from "../lib/composerDraftUploads";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { isMacPlatform } from "../lib/utils";
+import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
+import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
 import {
   readThreadShell,
   useProjects,
@@ -212,6 +216,7 @@ import {
   type SidebarProjectGroupMember,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
+import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 const SIDEBAR_SORT_LABELS: Record<SidebarProjectSortOrder, string> = {
   updated_at: "Last user message",
   created_at: "Created at",
@@ -255,7 +260,7 @@ function formatProjectMemberActionLabel(
   }
 
   return member.environmentLabel
-    ? `${member.environmentLabel} — ${member.workspaceRoot}`
+    ? `${member.environmentLabel} Ä‚ËĂ˘â€šÂ¬Ă˘â‚¬ĹĄ ${member.workspaceRoot}`
     : member.workspaceRoot;
 }
 
@@ -329,7 +334,7 @@ interface SidebarThreadRowProps {
     threadRef: ScopedThreadRef,
     orderedProjectThreadKeys: readonly string[],
   ) => void;
-  navigateToThread: (threadRef: ScopedThreadRef) => void;
+  navigateToThread: (threadRef: ScopedThreadRef) => Promise<void>;
   handleMultiSelectContextMenu: (position: { x: number; y: number }) => Promise<void>;
   handleThreadContextMenu: (
     threadRef: ScopedThreadRef,
@@ -348,6 +353,7 @@ interface SidebarThreadRowProps {
     prUrl: string,
     threadRef?: ScopedThreadRef,
   ) => boolean;
+  onFileDropThreads: (threadRef: ScopedThreadRef, files: File[]) => void;
 }
 
 const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
@@ -375,10 +381,29 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     cancelRename,
     attemptArchiveThread,
     openPrLink,
+    onFileDropThreads,
     thread,
   } = props;
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
+  const [isFileDragOver, setIsFileDragOver] = useState(false);
+  const fileDropHandlers = useMemo(
+    () =>
+      makeWorkspaceFileDropHandlers({
+        setDragActive: setIsFileDragOver,
+        addFiles: (files) => {
+          onFileDropThreads(threadRef, files);
+        },
+        addFolders: () => {},
+      }),
+    [onFileDropThreads, threadRef],
+  );
+  useEffect(() => {
+    if (!isFileDragOver) return;
+    const clearFileDrag = () => setIsFileDragOver(false);
+    window.addEventListener("dragend", clearFileDrag);
+    return () => window.removeEventListener("dragend", clearFileDrag);
+  }, [isFileDragOver]);
   const { leaseLiveStatus, rowRef } = useSidebarRowSubscriptionLease(isActive);
   const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[threadKey]);
   const isSelected = useThreadSelectionStore((state) => state.selectedThreadKeys.has(threadKey));
@@ -447,10 +472,16 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   });
   const linkedPullRequestStatus = useLinkedThreadPullRequest(
     thread.environmentId,
-    thread.linkedPullRequest ?? thread.branchPullRequest,
+    thread.linkedPullRequest,
     leaseLiveStatus,
+    thread.pullRequests,
+    thread.branchPullRequest,
   );
   const pr = linkedPullRequestStatus?.pr ?? null;
+  const supportsMultiplePullRequests = useSupportsMultiplePullRequests(thread.environmentId);
+  const currentLinkedPr = supportsMultiplePullRequests
+    ? resolveThreadCurrentPullRequestLink(thread.pullRequests)
+    : null;
   const prStatus = prStatusIndicator(pr, linkedPullRequestStatus?.sourceControlProvider);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isConfirmingArchive = confirmingArchiveThreadKey === threadKey && !isThreadRunning;
@@ -494,7 +525,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       // cmd/ctrl/shift double-clicks are multi-select intent, not rename.
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       // Ignore double-clicks bubbling from nested controls (PR status, port,
-      // archive buttons) — only the row body should enter inline rename.
+      // archive buttons) Ä‚ËĂ˘â€šÂ¬Ă˘â‚¬ĹĄ only the row body should enter inline rename.
       if ((event.target as HTMLElement).closest("button, a")) return;
       event.preventDefault();
       startThreadRename(threadKey, thread.title);
@@ -561,17 +592,26 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   );
   const handlePrClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
-      if (!prStatus) return;
+      const url = prStatus?.url ?? currentLinkedPr?.url;
+      if (!url) return;
       const openedInRightPanel = openPrLink(
         event,
-        prStatus.url,
+        url,
         openPullRequestsInRightPanel ? threadRef : undefined,
       );
       if (openedInRightPanel && openPullRequestsInRightPanel && !isActive) {
         navigateToThread(threadRef);
       }
     },
-    [isActive, navigateToThread, openPrLink, openPullRequestsInRightPanel, prStatus, threadRef],
+    [
+      isActive,
+      navigateToThread,
+      openPrLink,
+      openPullRequestsInRightPanel,
+      prStatus,
+      currentLinkedPr,
+      threadRef,
+    ],
   );
   const handleRenameInputRef = useCallback(
     (element: HTMLInputElement | null) => {
@@ -666,6 +706,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       ref={rowRef}
       className="w-full"
       data-thread-item
+      {...fileDropHandlers}
       onMouseLeave={handleMouseLeave}
       onBlurCapture={handleBlurCapture}
     >
@@ -677,7 +718,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         className={`${resolveThreadRowClassName({
           isActive,
           isSelected,
-        })} relative isolate`}
+        })} relative isolate${isFileDragOver ? " ring-1 ring-inset ring-primary/70" : ""}`}
         onClick={handleRowClick}
         onDoubleClick={handleRowDoubleClick}
         onKeyDown={handleRowKeyDown}
@@ -710,6 +751,19 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               </TooltipPopup>
             </Tooltip>
           )}
+          {!pr && currentLinkedPr ? (
+            <a
+              href={currentLinkedPr.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={handlePrClick}
+              className="text-muted-foreground"
+              aria-label={`PR #${currentLinkedPr.number}, status pending`}
+            >
+              <PullRequestGlyph.pullRequest className="size-3" />
+            </a>
+          ) : null}
           {threadStatus && <ThreadStatusLabel status={threadStatus} />}
           {renamingThreadKey === threadKey ? (
             <input
@@ -919,7 +973,8 @@ interface SidebarProjectThreadListProps {
     threadRef: ScopedThreadRef,
     orderedProjectThreadKeys: readonly string[],
   ) => void;
-  navigateToThread: (threadRef: ScopedThreadRef) => void;
+  navigateToThread: (threadRef: ScopedThreadRef) => Promise<void>;
+  onFileDropThreads: (threadRef: ScopedThreadRef, files: File[]) => void;
   handleMultiSelectContextMenu: (position: { x: number; y: number }) => Promise<void>;
   handleThreadContextMenu: (
     threadRef: ScopedThreadRef,
@@ -971,6 +1026,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     attachThreadListAutoAnimateRef,
     handleThreadClick,
     navigateToThread,
+    onFileDropThreads,
     handleMultiSelectContextMenu,
     handleThreadContextMenu,
     clearSelection,
@@ -1022,6 +1078,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
               confirmArchiveButtonRefs={confirmArchiveButtonRefs}
               handleThreadClick={handleThreadClick}
               navigateToThread={navigateToThread}
+              onFileDropThreads={onFileDropThreads}
               handleMultiSelectContextMenu={handleMultiSelectContextMenu}
               handleThreadContextMenu={handleThreadContextMenu}
               clearSelection={clearSelection}
@@ -1139,6 +1196,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     (settings) => settings.sidebarThreadPreviewCount,
   );
   const router = useRouter();
+  const queuePendingFileDrop = useSidebarPendingFileDropStore((s) => s.queuePendingFileDrop);
+  const clearPendingFileDrop = useSidebarPendingFileDropStore((s) => s.clearPendingFileDrop);
   const { isMobile, setOpenMobile } = useSidebar();
   const markThreadUnread = useUiStateStore((state) => state.markThreadUnread);
   const setProjectExpanded = useUiStateStore((state) => state.setProjectExpanded);
@@ -1743,12 +1802,31 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (isMobile) {
         setOpenMobile(false);
       }
-      void router.navigate({
+      return router.navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(threadRef),
       });
     },
     [clearSelection, isMobile, router, setOpenMobile, setSelectionAnchor],
+  );
+  const handleThreadFileDrop = useCallback(
+    async (threadRef: ScopedThreadRef, files: File[]) => {
+      const dropId = queuePendingFileDrop({ threadRef, files });
+      const targetPathname = router.buildLocation({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(threadRef),
+      }).pathname;
+      if (targetPathname === router.state.location.pathname) return;
+      try {
+        await navigateToThread(threadRef);
+        if (targetPathname !== router.state.location.pathname) {
+          clearPendingFileDrop(dropId);
+        }
+      } catch {
+        clearPendingFileDrop(dropId);
+      }
+    },
+    [clearPendingFileDrop, navigateToThread, queuePendingFileDrop, router],
   );
 
   const handleThreadClick = useCallback(
@@ -2325,13 +2403,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             />
           )}
           <span className="flex shrink-0">
-            <ProjectFavicon
-              environmentId={project.environmentId}
-              cwd={project.workspaceRoot}
-              projectName={project.title}
-              faviconPath={project.faviconPath}
-              projectIcon={project.projectIcon}
-            />
+            <ProjectFavicon project={project} />
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span className="truncate text-sm font-medium text-sidebar-foreground/90">
@@ -2344,7 +2416,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             ) : null}
           </span>
         </SidebarMenuButton>
-        {/* Environment badge – visible by default, crossfades with the
+        {/* Environment badge Ä‚ËĂ˘â€šÂ¬Ă˘â‚¬Ĺ› visible by default, crossfades with the
             "new thread" button on hover using the same pointer-events +
             opacity pattern as the thread row archive/timestamp swap. */}
         {project.environmentPresence === "remote-only" && (
@@ -2418,6 +2490,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         attachThreadListAutoAnimateRef={attachThreadListAutoAnimateRef}
         handleThreadClick={handleThreadClick}
         navigateToThread={navigateToThread}
+        onFileDropThreads={handleThreadFileDrop}
         handleMultiSelectContextMenu={handleMultiSelectContextMenu}
         handleThreadContextMenu={handleThreadContextMenu}
         clearSelection={clearSelection}
@@ -2815,7 +2888,7 @@ function SidebarConversationsSection({
   threadJumpLabelByKey: ReadonlyMap<string, string>;
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
   deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
-  navigateToThread: (threadRef: ScopedThreadRef) => void;
+  navigateToThread: (threadRef: ScopedThreadRef) => Promise<void>;
 }) {
   const [renamingThreadKey, setRenamingThreadKey] = useState<string | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
@@ -2833,6 +2906,21 @@ function SidebarConversationsSection({
     reportFailure: false,
   });
   const openPrLink = useOpenPrLink();
+  const router = useRouter();
+  const queuePendingFileDrop = useSidebarPendingFileDropStore((s) => s.queuePendingFileDrop);
+  const handleThreadFileDrop = useCallback(
+    async (threadRef: ScopedThreadRef, files: File[]) => {
+      queuePendingFileDrop({ threadRef, files });
+      const targetPathname = router.buildLocation({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(threadRef),
+      }).pathname;
+      if (router.state.location.pathname !== targetPathname) {
+        await navigateToThread(threadRef);
+      }
+    },
+    [navigateToThread, queuePendingFileDrop, router],
+  );
 
   const orderedThreadKeys = useMemo(
     () => conversationThreads.map((t) => scopedThreadKey(scopeThreadRef(t.environmentId, t.id))),
@@ -3038,6 +3126,7 @@ function SidebarConversationsSection({
                 confirmArchiveButtonRefs={confirmArchiveButtonRefs}
                 handleThreadClick={handleThreadClick}
                 navigateToThread={navigateToThread}
+                onFileDropThreads={handleThreadFileDrop}
                 handleMultiSelectContextMenu={handleMultiSelectContextMenu}
                 handleThreadContextMenu={handleThreadContextMenu}
                 clearSelection={clearSelection}
@@ -3080,7 +3169,7 @@ interface SidebarProjectsContentProps {
   handleNewThread: ReturnType<typeof useNewThreadHandler>;
   handleNewConversation: () => void;
   conversationThreads: readonly SidebarThreadSummary[];
-  navigateToThread: (threadRef: ScopedThreadRef) => void;
+  navigateToThread: (threadRef: ScopedThreadRef) => Promise<void>;
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
   deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
   sortedProjects: readonly SidebarProjectSnapshot[];
@@ -3434,7 +3523,7 @@ export default function LegacySidebar() {
     });
   }, [projectOrder, projects]);
 
-  // Build a mapping from physical project key → logical project key for
+  // Build a mapping from physical project key Ä‚ËĂ˘â‚¬Â Ă˘â‚¬â„˘ logical project key for
   // cross-environment grouping.  Projects that share a repositoryIdentity
   // canonicalKey are treated as one logical project in the sidebar.
   const physicalToLogicalKey = useMemo(() => {
@@ -3569,7 +3658,7 @@ export default function LegacySidebar() {
       if (isMobile) {
         setOpenMobile(false);
       }
-      void navigate({
+      return navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(threadRef),
       });

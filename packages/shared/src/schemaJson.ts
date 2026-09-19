@@ -217,9 +217,10 @@ export function stripCommentsAndTrailingCommas(input: string): string {
     // Trailing comma before } or ]
     if (char === ",") {
       let j = i + 1;
-      let nextChar = "";
+      let nextChar: string | undefined;
       while (j < len) {
         const c = input[j];
+        if (!c) break;
         if (c === " " || c === "\t" || c === "\n" || c === "\r") {
           j += 1;
           continue;
@@ -265,7 +266,7 @@ const parseLenientJsonGetter = SchemaGetter.onSome((input: string) =>
 );
 
 /**
- * Schema transformation: lenient JSONC string ↔ unknown.
+ * Schema transformation: lenient JSONC string â†” unknown.
  *
  * Same API as `SchemaTransformation.fromJsonString`, but the decode side
  * strips trailing commas and JS-style comments before parsing.
