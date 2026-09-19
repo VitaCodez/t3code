@@ -549,19 +549,37 @@ const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
     return yield* new ExternalLauncherUnsupportedEditorError({ editor: input.editor });
   }
 
-  const cleanTarget = Option.match(parseTargetPathAndPosition(input.cwd), {
-    onNone: () => input.cwd,
-    onSome: (pos) => pos.path,
-  });
-
   const fileSystem = yield* FileSystem.FileSystem;
-  const isFile = yield* fileSystem.stat(cleanTarget).pipe(
-    Effect.map((info) => info.type === "File"),
-    Effect.orElseSucceed(() => false),
-  );
+  const targetExists = yield* fileSystem.exists(input.cwd).pipe(Effect.orElseSucceed(() => false));
+  const cleanTarget = targetExists
+    ? input.cwd
+    : Option.match(parseTargetPathAndPosition(input.cwd), {
+        onNone: () => input.cwd,
+        onSome: (pos) => pos.path,
+      });
 
-  if (input.reveal === true || isFile) {
+  if (input.reveal === true) {
     return yield* resolveFileManagerRevealLaunch(cleanTarget, platform, env, command);
+  }
+
+  const isExplorer =
+    platform === "win32" ||
+    (command === "explorer.exe" && shouldUseWindowsHostFromWsl(platform, env));
+
+  if (isExplorer) {
+    const isFile = yield* fileSystem.stat(cleanTarget).pipe(
+      Effect.map((info) => info.type === "File"),
+      Effect.orElseSucceed(() => false),
+    );
+    if (isFile) {
+      const hasPowerShell =
+        platform === "win32"
+          ? yield* isCommandAvailable(resolvePowerShellPath(env), { env })
+          : yield* isCommandAvailable(WSL_POWERSHELL_COMMAND, { env });
+      if (hasPowerShell) {
+        return yield* resolveFileManagerRevealLaunch(cleanTarget, platform, env, command);
+      }
+    }
   }
 
   const target =
