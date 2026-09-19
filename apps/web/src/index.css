@@ -2202,6 +2202,13 @@ html[data-wallpaper-active="true"] [data-chat-workspace-drop-target] {
   background-color: color-mix(in srgb, var(--background) 20%, transparent) !important;
 }
 
+/* Messages wrapper and loading placeholder inside chat workspace */
+html[data-wallpaper-active="true"] [data-chat-messages-wrapper="true"],
+html[data-wallpaper-active="true"] [data-chat-workspace-drop-target] > .bg-background,
+html[data-wallpaper-active="true"] [data-timeline-loading="true"] {
+  background-color: transparent !important;
+}
+
 /* Workspace header with translucent glass tint */
 html[data-wallpaper-active="true"] [data-chat-header] {
   background-color: color-mix(in srgb, var(--background) 55%, transparent) !important;
