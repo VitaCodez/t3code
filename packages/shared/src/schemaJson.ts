@@ -1,7 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SchemaGetter from "effect/SchemaGetter";
@@ -257,16 +256,15 @@ export function stripCommentsAndTrailingCommas(input: string): string {
   return result;
 }
 
-const parseLenientJsonGetter = SchemaGetter.onSome((input: string) =>
+const parseLenientJsonGetter = SchemaGetter.transformEffect((input: string) =>
   decodeJsonString(input).pipe(
     Effect.catch(() => decodeJsonString(stripCommentsAndTrailingCommas(input))),
-    Effect.map(Option.some),
     Effect.mapError((error) => error.issue),
   ),
 );
 
 /**
- * Schema transformation: lenient JSONC string â†” unknown.
+ * Schema transformation: lenient JSONC string ↔ unknown.
  *
  * Same API as `SchemaTransformation.fromJsonString`, but the decode side
  * strips trailing commas and JS-style comments before parsing.
@@ -277,8 +275,8 @@ const fromLenientJsonString = new SchemaTransformation.Transformation(
   SchemaGetter.stringifyJson(),
 );
 
-const prettyJsonString = SchemaGetter.parseJson<string>().compose(
-  SchemaGetter.stringifyJson({ space: 2 }),
+const prettyJsonString = SchemaGetter.parseJson<string>().pipe(
+  SchemaGetter.compose(SchemaGetter.stringifyJson({ space: 2 })),
 );
 
 /**

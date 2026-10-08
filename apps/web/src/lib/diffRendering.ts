@@ -1,6 +1,6 @@
 import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
+import { parseDiffFromFile } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/types";
-import { unquoteGitPatchPath } from "@t3tools/shared/gitPatchPath";
 
 const DIFF_THEME_NAMES = {
   light: "pierre-light",
@@ -46,6 +46,7 @@ export type RenderablePatch =
   | {
       kind: "files";
       files: FileDiffMetadata[];
+      sourceFiles: FileDiffMetadata[];
     }
   | {
       kind: "raw";
@@ -73,6 +74,7 @@ export function getDiffLineStat(files: ReadonlyArray<FileDiffMetadata>): DiffLin
 }
 
 interface RenderablePatchOptions {
+  ignoreWhitespace?: boolean;
   /**
    * Pierre's partial-patch parser keeps hunk render starts in source-file
    * coordinates. Its virtualizer iterates partial patches as compact rows, so
@@ -80,6 +82,59 @@ interface RenderablePatchOptions {
    * for the "N unmodified lines" separator.
    */
   compactPartialHunkOffsets?: boolean;
+}
+
+function hideWhitespaceChanges(file: FileDiffMetadata): FileDiffMetadata {
+  let splitDelta = 0;
+  let unifiedDelta = 0;
+  const hunks = file.hunks.map((hunk) => {
+    const oldContents = file.deletionLines
+      .slice(hunk.deletionLineIndex, hunk.deletionLineIndex + hunk.deletionCount)
+      .map((line) => `${line.replace(/\s/g, "")}\n`)
+      .join("");
+    const newContents = file.additionLines
+      .slice(hunk.additionLineIndex, hunk.additionLineIndex + hunk.additionCount)
+      .map((line) => `${line.replace(/\s/g, "")}\n`)
+      .join("");
+    const filtered = parseDiffFromFile(
+      { name: file.name, contents: oldContents },
+      { name: file.name, contents: newContents },
+      { context: Infinity },
+    ).hunks[0];
+    const next = {
+      ...hunk,
+      additionLines: filtered?.additionLines ?? 0,
+      deletionLines: filtered?.deletionLines ?? 0,
+      hunkContent: filtered
+        ? filtered.hunkContent.map((content) => ({
+            ...content,
+            additionLineIndex: content.additionLineIndex + hunk.additionLineIndex,
+            deletionLineIndex: content.deletionLineIndex + hunk.deletionLineIndex,
+          }))
+        : [
+            {
+              type: "context" as const,
+              lines: hunk.additionCount,
+              additionLineIndex: hunk.additionLineIndex,
+              deletionLineIndex: hunk.deletionLineIndex,
+            },
+          ],
+      splitLineStart: hunk.splitLineStart + splitDelta,
+      unifiedLineStart: hunk.unifiedLineStart + unifiedDelta,
+      splitLineCount: filtered?.splitLineCount ?? hunk.additionCount,
+      unifiedLineCount: filtered?.unifiedLineCount ?? hunk.additionCount,
+    };
+    splitDelta += next.splitLineCount - hunk.splitLineCount;
+    unifiedDelta += next.unifiedLineCount - hunk.unifiedLineCount;
+    return next;
+  });
+  return {
+    ...file,
+    hunks,
+    splitLineCount: file.splitLineCount + splitDelta,
+    unifiedLineCount: file.unifiedLineCount + unifiedDelta,
+    ...(file.cacheKey ? { cacheKey: `${file.cacheKey}:ignore-whitespace` } : {}),
+  };
 }
 
 function compactPartialHunkOffsets(file: FileDiffMetadata): FileDiffMetadata {
@@ -121,13 +176,13 @@ export function getRenderablePatch(
       normalizedPatch,
       buildPatchCacheKey(normalizedPatch, cacheScope),
     );
-    const files = parsedPatches.flatMap((parsedPatch) =>
-      options.compactPartialHunkOffsets
-        ? parsedPatch.files.map(compactPartialHunkOffsets)
-        : parsedPatch.files,
-    );
+    const sourceFiles = parsedPatches.flatMap((parsedPatch) => parsedPatch.files);
+    const files = sourceFiles.map((file) => {
+      const filtered = options.ignoreWhitespace ? hideWhitespaceChanges(file) : file;
+      return options.compactPartialHunkOffsets ? compactPartialHunkOffsets(filtered) : filtered;
+    });
     if (files.length > 0) {
-      return { kind: "files", files };
+      return { kind: "files", files, sourceFiles };
     }
 
     return {
@@ -145,17 +200,11 @@ export function getRenderablePatch(
 }
 
 /**
- * What the patch called the file, as the file's own name. Git writes a name holding a tab, a
- * newline, a quote or a backslash quoted and escaped, and the parser hands one of those back still
- * escaped. A viewed mark, a review comment and a file's contents are all asked for by this path,
- * and the host knows the file only under the name it really has.
+ * The file's own name. Git quotes and escapes a name holding a tab, a newline, a quote or a
+ * backslash, and the parser decodes it, so this is the name the host knows the file by.
  */
-function fileDiffPath(raw: string): string {
-  return unquoteGitPatchPath(raw);
-}
-
 export function resolveFileDiffPath(fileDiff: FileDiffMetadata): string {
-  return fileDiffPath(fileDiff.name ?? fileDiff.prevName ?? "");
+  return fileDiff.name ?? fileDiff.prevName ?? "";
 }
 
 /**
@@ -163,7 +212,7 @@ export function resolveFileDiffPath(fileDiff: FileDiffMetadata): string {
  * path, and the hosts that resolve a diff position against both sides need both names.
  */
 export function resolveFileDiffPreviousPath(fileDiff: FileDiffMetadata): string {
-  return fileDiffPath(fileDiff.prevName ?? fileDiff.name ?? "");
+  return fileDiff.prevName ?? fileDiff.name ?? "";
 }
 
 /**

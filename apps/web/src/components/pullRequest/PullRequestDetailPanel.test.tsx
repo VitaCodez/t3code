@@ -24,6 +24,11 @@ const { newThread, prepareThread, refresh, Wrapper, Trigger } = vi.hoisted(() =>
     </>
   ),
 }));
+vi.mock("~/state/session", async (original) => ({
+  ...(await original<typeof import("~/state/session")>()),
+  useEnvironmentScope: () => true,
+  readEnvironmentScope: () => true,
+}));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => [] }));
 vi.mock("~/state/server", () => ({ primaryServerKeybindingsAtom: {} }));
 vi.mock("~/state/entities", () => ({ useProjects: () => [], useServerConfigs: () => new Map() }));
@@ -32,16 +37,18 @@ vi.mock("~/state/environments", () => ({
   usePrimaryEnvironmentId: () => EnvironmentId.make("env-1"),
 }));
 vi.mock("~/hooks/useSettings", () => ({
+  useEnvironmentSettings: () => undefined,
   useClientSettings: (select: (settings: typeof DEFAULT_CLIENT_SETTINGS) => unknown) =>
     select(DEFAULT_CLIENT_SETTINGS),
 }));
 vi.mock("~/hooks/useLiveRefresh", () => ({ useLiveRefresh: () => {} }));
 vi.mock("~/hooks/useHandleNewThread", () => ({ useNewThreadHandler: () => newThread }));
 vi.mock("~/lib/sourceControlActions", () => ({
-  usePreparePullRequestThreadAction: () => ({ run: prepareThread }),
+  usePreparePullRequestThreadAction: () => ({ run: prepareThread, isAllowed: true, error: null }),
 }));
 vi.mock("~/state/use-atom-command", () => ({ useAtomCommand: () => vi.fn() }));
-vi.mock("~/state/pullRequests", () => ({
+vi.mock("~/state/pullRequests", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/state/pullRequests")>()),
   pullRequestEnvironment: { detail: () => "detail", activity: () => "activity" },
   usePullRequestTurnRefresh: () => 0,
   useSharedPullRequestSummary: () => null,
