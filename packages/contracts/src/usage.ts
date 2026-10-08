@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Usage reporting contract.
  *
  * Each environment scans native session files and databases, including work

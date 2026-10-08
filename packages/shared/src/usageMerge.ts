@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Merges per-environment usage summaries into the single view the page renders.
  *
  * Pure, so the de-duplication and derivation rules can be tested without a

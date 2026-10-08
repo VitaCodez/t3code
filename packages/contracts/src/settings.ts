@@ -1,4 +1,4 @@
-﻿import { SshDeviceHostConfigs } from "./device.ts";
+import { SshDeviceHostConfigs } from "./device.ts";
 import {
   AuthSettingsWriteScope,
   AuthProvidersManageScope,
