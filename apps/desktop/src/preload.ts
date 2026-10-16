@@ -1,5 +1,6 @@
 import type {
   DesktopBridge,
+  DesktopPreviewOpenLinkEvent,
   DesktopPreviewPointerEvent,
   DesktopPreviewRecordingInputEvent,
   DesktopPreviewRecordingFrame,
@@ -39,9 +40,7 @@ try {
       void ipcRenderer.invoke(IpcChannels.COMPLETE_LEGACY_LOCAL_STORAGE_CHANNEL);
     }
   }
-} catch {
-  // Best effort: the app still starts on the V2 profile's own storage.
-}
+} catch {}
 
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Electron exposes the client platform in its sandboxed preload process.
 const clientPlatform = process.platform;
@@ -284,6 +283,18 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.removeListener(IpcChannels.UPDATE_STATE_CHANNEL, wrappedListener);
     };
   },
+  webLinks: {
+    setReady: (ready) => ipcRenderer.invoke(IpcChannels.WEB_LINK_READY_CHANNEL, ready),
+    onOpen: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, url: unknown) => {
+        if (typeof url === "string") listener(url);
+      };
+      ipcRenderer.on(IpcChannels.WEB_LINK_OPEN_CHANNEL, wrappedListener);
+      return () => {
+        ipcRenderer.removeListener(IpcChannels.WEB_LINK_OPEN_CHANNEL, wrappedListener);
+      };
+    },
+  },
   appActivation: {
     setReady: (ready) =>
       ipcRenderer.invoke(IpcChannels.DESKTOP_APP_ACTIVATION_READY_CHANNEL, ready),
@@ -415,6 +426,15 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.on(IpcChannels.PREVIEW_POINTER_EVENT_CHANNEL, wrappedListener);
       return () =>
         ipcRenderer.removeListener(IpcChannels.PREVIEW_POINTER_EVENT_CHANNEL, wrappedListener);
+    },
+    onOpenLink: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, linkEvent: unknown) => {
+        if (typeof linkEvent !== "object" || linkEvent === null) return;
+        listener(linkEvent as DesktopPreviewOpenLinkEvent);
+      };
+      ipcRenderer.on(IpcChannels.PREVIEW_OPEN_LINK_CHANNEL, wrappedListener);
+      return () =>
+        ipcRenderer.removeListener(IpcChannels.PREVIEW_OPEN_LINK_CHANNEL, wrappedListener);
     },
   },
 } satisfies DesktopBridge);
