@@ -1,4 +1,4 @@
-# T3 Code currect version: v0.0.45
+# T3 Code currect version: v0.1.0
 
 > [!IMPORTANT]
 > **Fork & Attribution Notice:**  
