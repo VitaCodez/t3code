@@ -5,7 +5,7 @@ also lists the command IDs and defaults available in your version.
 
 ## Composer controls
 
-In **Settings → General → Send shortcut**, choose whether Enter sends, requires
+In **Settings → Chat → Send shortcut**, choose whether Enter sends, requires
 `mod+Enter` for multiline prompts, or always requires `mod+Enter`. `Shift+Enter`
 inserts a new line. This applies to the web and desktop composer at desktop widths.
 
@@ -29,6 +29,11 @@ workspace, and `mod+shift+g` for the Git branch. The workspace menu includes the
 current checkout, a new worktree, and the previous worktree when available.
 Use `mod+shift+l` to reuse the previous worktree directly.
 
+To change effort one step without opening the picker, bind
+**Composer: Increase Effort** and **Composer: Decrease Effort** in Keybindings.
+Both are unbound by default. Increase wraps from the highest level to the
+lowest, and decrease wraps from the lowest level to the highest.
+
 In the model picker, press Left in an empty search field or Shift+Tab to reach
 the provider list. Use Up/Down to move and Enter to choose. Right returns to
 model search. `mod+shift+up` and `mod+shift+down` switch providers directly and clear the
@@ -41,7 +46,7 @@ in Settings.
 
 ## Copy pull request references
 
-With a PR open in the right panel or on the Pull Requests page, use `mod+shift+c`
+With a PR open in the right panel or on the Pull requests page, use `mod+shift+c`
 to copy its URL and `mod+shift+k` to copy its number with a `#` prefix.
 Both shortcuts can be changed in Settings. Search for “Copy Link or Thread ID”
 or “Copy Number”. They copy the selected PR and leave terminal input alone.
@@ -145,8 +150,9 @@ shortcut; assign one in **Settings → Keybindings**.
 bottom of the sidebar, such as unpin, settle, snooze, archive, or discarding a
 draft. Consecutive
 actions of the same kind undo together. The notice remains available for five
-seconds after the latest action. The default shortcut skips text fields and
-terminals so native undo keeps working there.
+seconds after the latest action. Right after an action, the shortcut works even
+in a text field such as the composer. Once you type or press another key, the
+field gets its own undo back. Terminals always keep their native shortcut.
 
 `navigation.back` (`mod+[` by default) and `navigation.forward` (`mod+]`) move
 through the pages you have visited, like a browser's back and forward buttons.
@@ -159,7 +165,7 @@ through the pages you have visited, like a browser's back and forward buttons.
 ## Reserved shortcuts
 
 In the desktop app, `mod+w` closes the focused terminal or the active right-panel
-tab. When nothing remains to close, it closes the window. In a browser, `mod+w`
+tab. When nothing remains to close, it does nothing; it never closes the window. In a browser, `mod+w`
 closes the browser tab; rebind `rightPanel.close` and `terminal.close` to an available
 shortcut such as `alt+w`.
 

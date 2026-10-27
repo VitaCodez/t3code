@@ -1,3 +1,5 @@
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { AsyncResult } from "effect/reactivity";
 import * as Dialog from "../../components/ui/Dialog";
 import { TextInputWrapper } from "expo-paste-input";
 import { AppTextInput as TextInput } from "../../components/ui/AppText";
@@ -6,7 +8,7 @@ import { convertPastedImagesToAttachments } from "../../lib/composerImages";
 import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS, type UserInputQuestion } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { View } from "react-native";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { ComposerAttachmentButton } from "./ComposerAttachmentButton";
 import { ComposerAttachmentStrip } from "../../components/ComposerAttachmentStrip";
 import { pickComposerFiles, pickComposerMedia } from "../../lib/composerImages";
@@ -43,20 +45,23 @@ export function QuestionAttachments(props: {
   const [previewVideo, setPreviewVideo] = useState<VideoPreviewSource | null>(null);
   const configs = useServerConfigs();
   const drafts = useAtomValue(composerDraftsAtom);
-  const scopeKey = JSON.stringify([
-    selectedThread?.environmentId,
-    selectedThread?.id,
-    props.requestId,
-    props.question.id,
-  ]);
-  const pickerScope = useRef<{ key: string; active: boolean } | null>(null);
+  const focusedRef = useRef(false);
+  const onInputFocusChange = props.onInputFocusChange;
+  // The caller keys this component by request and question, so unmounting ends any open
+  // picker's scope.
+  const pickerScope = useRef<{ active: boolean }>({ active: false });
   useEffect(() => {
-    const scope = { key: scopeKey, active: true };
+    const scope = { active: true };
     pickerScope.current = scope;
     return () => {
       scope.active = false;
     };
-  }, [scopeKey]);
+  }, []);
+  // Unmounted inputs never emit onBlur; explicitly release keyboard ownership.
+  const releaseFocus = useEffectEvent(() => {
+    if (focusedRef.current) onInputFocusChange?.(false);
+  });
+  useEffect(() => () => releaseFocus(), []);
   const append = (
     key: string,
     attachments: Parameters<typeof appendComposerDraftAttachments>[1],
@@ -97,7 +102,7 @@ export function QuestionAttachments(props: {
     })
       .then(async (images) => {
         if (
-          scope?.active &&
+          scope.active &&
           (appAtomRegistry.get(questionAttachmentPreparationAtom)[key] ?? 0) > 0
         ) {
           if (append(key, images) > 0)
@@ -126,7 +131,7 @@ export function QuestionAttachments(props: {
   const pick = async (kind: "media" | "files") => {
     const scope = pickerScope.current;
     changeQuestionAttachmentPreparation(key, 1);
-    try {
+    const picked = await settlePromise(async () => {
       const existingCount = appAtomRegistry.get(composerDraftsAtom)[key]?.attachments.length ?? 0;
       const result =
         kind === "files"
@@ -141,7 +146,7 @@ export function QuestionAttachments(props: {
       const picked = "files" in result ? result.files : result.attachments;
       // Resolution on another client clears the reservation while the picker is open.
       if (
-        !scope?.active ||
+        !scope.active ||
         (appAtomRegistry.get(questionAttachmentPreparationAtom)[key] ?? 0) === 0
       ) {
         await releaseUnusedComposerAttachmentFiles(picked);
@@ -150,10 +155,11 @@ export function QuestionAttachments(props: {
       const rejected = append(key, picked);
       if (result.error || rejected > 0)
         Dialog.alert("Could not attach file", result.error ?? "Too many attachments.");
-    } catch (error) {
+    });
+    changeQuestionAttachmentPreparation(key, -1);
+    if (AsyncResult.isFailure(picked)) {
+      const error = squashAtomCommandFailure(picked);
       Dialog.alert("Could not attach file", error instanceof Error ? error.message : "Try again.");
-    } finally {
-      changeQuestionAttachmentPreparation(key, -1);
     }
   };
   return (
@@ -197,8 +203,14 @@ export function QuestionAttachments(props: {
           submitBehavior={props.question.initialAnswer !== undefined ? "newline" : undefined}
           editable={!props.disabled}
           onChangeText={props.onChangeText}
-          onFocus={() => props.onInputFocusChange?.(true)}
-          onBlur={() => props.onInputFocusChange?.(false)}
+          onFocus={() => {
+            focusedRef.current = true;
+            onInputFocusChange?.(true);
+          }}
+          onBlur={() => {
+            focusedRef.current = false;
+            onInputFocusChange?.(false);
+          }}
           placeholder="Or type a custom answer"
           className="min-h-[54px] rounded-2xl border border-input-border bg-input px-3.5 py-3 font-sans text-base text-foreground"
         />

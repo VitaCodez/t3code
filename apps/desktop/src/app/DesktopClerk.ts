@@ -86,6 +86,7 @@ export const desktopClerkFrontendApiHostname = resolveDesktopClerkFrontendApiHos
 function createDesktopClerkBridge(stateDir: string, isDevelopment: boolean) {
   return createClerkBridge({
     storage: storage({ path: stateDir }),
+    manageSingleInstanceLock: false,
     passkeys: true,
     renderer: {
       scheme: ElectronProtocol.getDesktopScheme(isDevelopment),
@@ -94,7 +95,7 @@ function createDesktopClerkBridge(stateDir: string, isDevelopment: boolean) {
   });
 }
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const electronApp = yield* ElectronApp.ElectronApp;
@@ -104,7 +105,21 @@ export const make = Effect.gen(function* () {
   const userDataPath = yield* DesktopUserData.resolveUserDataPath(environment);
   yield* electronApp.setPath("userData", userDataPath);
 
-  const bridge = yield* Effect.acquireRelease(
+  // Clerk skips the profile lock on macOS. Interrupt before runtime construction because quit is asynchronous.
+  if (!(yield* electronApp.requestSingleInstanceLock)) {
+    yield* electronApp.quit;
+    return yield* Effect.interrupt;
+  }
+
+  const pendingSecondInstances: Array<readonly string[]> = [];
+  let handleSecondInstance = (argv: readonly string[]) => {
+    pendingSecondInstances.push(argv);
+  };
+  yield* electronApp.on("second-instance", (_event: unknown, argv: readonly string[]) => {
+    handleSecondInstance(argv);
+  });
+
+  yield* Effect.acquireRelease(
     Effect.try({
       try: () => createDesktopClerkBridge(environment.stateDir, environment.isDevelopment),
       catch: (cause) =>
@@ -133,16 +148,6 @@ export const make = Effect.gen(function* () {
       const webLinks = yield* DesktopWebLinks.DesktopWebLinks;
       const context = yield* Effect.context<ElectronWindow.ElectronWindow>();
       const runPromise = Effect.runPromiseWith(context);
-
-      // The SDK bridge holds Electron's single-instance lock (acquired at
-      // bridge creation) so OAuth deep-link callbacks on Windows/Linux are
-      // forwarded to the running app. In a secondary instance the bridge has
-      // already begun quitting the app; app.quit() is asynchronous, so stop
-      // bootstrap here before whenReady can fire.
-      if (!bridge.isPrimaryInstance) {
-        yield* electronApp.quit;
-        return yield* Effect.interrupt;
-      }
 
       const startProviderAuthHandoff = (value: string | undefined) => {
         if (!value) return false;
@@ -214,7 +219,7 @@ export const make = Effect.gen(function* () {
         event.preventDefault();
         void runPromise(webLinks.receive(NodeURL.pathToFileURL(path).href));
       });
-      yield* electronApp.on("second-instance", (_event: unknown, argv: readonly string[]) => {
+      handleSecondInstance = (argv) => {
         if (
           argv?.some(
             (value) =>
@@ -228,7 +233,8 @@ export const make = Effect.gen(function* () {
             if (Option.isSome(mainWindow)) yield* electronWindow.reveal(mainWindow.value);
           }),
         );
-      });
+      };
+      for (const argv of pendingSecondInstances.splice(0)) handleSecondInstance(argv);
     }).pipe(Effect.withSpan("desktop.clerk.configure")),
   });
 });

@@ -47,10 +47,47 @@ const PullRequestListPreferences = Schema.Struct({
 });
 export type PullRequestListPreferences = typeof PullRequestListPreferences.Type;
 
+/**
+ * The page each workspace tab last showed, reopened when the tab returns with columns. `key` is
+ * that page's route key: reopening under the same key reuses the screen a tab kept mounted.
+ */
+const WorkspaceSelections = Schema.Struct({
+  threads: Schema.optional(
+    Schema.Struct({
+      environmentId: Schema.String,
+      threadId: Schema.String,
+      key: Schema.optional(Schema.String),
+    }),
+  ),
+  pullRequests: Schema.optional(
+    Schema.Struct({
+      environmentId: Schema.String,
+      projectId: Schema.String,
+      repository: Schema.String,
+      number: Schema.Number,
+      host: Schema.optional(Schema.String),
+      key: Schema.optional(Schema.String),
+    }),
+  ),
+  settings: Schema.optional(Schema.String),
+  settingsKey: Schema.optional(Schema.String),
+  /** A draft the threads tab showed after its last chat; only meaningful in its session. */
+  threadsDraft: Schema.optional(Schema.Struct({ key: Schema.String, params: Schema.Unknown })),
+});
+export type WorkspaceSelections = typeof WorkspaceSelections.Type;
+
 const isThreadListFilters = Schema.is(ThreadListFilters);
+const isWorkspaceSelections = Schema.is(WorkspaceSelections);
 const isPullRequestListPreferences = Schema.is(PullRequestListPreferences);
+const ThreadProject = Schema.Struct({
+  environmentId: Schema.NonEmptyString,
+  projectId: Schema.NonEmptyString,
+});
+const isThreadProject = Schema.is(ThreadProject);
 
 export interface Preferences {
+  readonly navigationTabOrder?: readonly string[];
+  readonly hiddenNavigationTabs?: readonly string[];
   readonly pullRequestHideTestFiles?: boolean;
   readonly pullRequestMergeMethod?: PullRequestMergeMethod;
   readonly liveActivitiesEnabled?: boolean;
@@ -63,11 +100,11 @@ export interface Preferences {
   readonly markdownFontSize?: number;
   readonly codeFontSize?: number | null;
   readonly codeWordBreak?: boolean;
+  readonly mathRenderingEnabled?: boolean;
   readonly connectOnboardingOptOutAccounts?: ReadonlyArray<string>;
   readonly collapsedProjectGroups?: readonly string[];
-  /** Environments whose "reclaim database space" notice was dismissed. */
   readonly dismissedDatabaseStorageNotices?: readonly string[];
-  /** What the Return key does in the composer on a hardware keyboard. iOS only. */
+  /** Hardware Return behavior is iOS-only. */
   readonly composerEnterBehavior?: ComposerEnterBehavior;
   readonly followUpBehavior?: FollowUpBehavior;
   readonly microphones?: ReadonlyArray<MicrophoneEntry>;
@@ -75,6 +112,8 @@ export interface Preferences {
   readonly projectGroupingMode?: SidebarProjectGroupingMode;
   readonly planModeEnabled?: boolean;
   readonly workingShelfEnabled?: boolean;
+  readonly useLastProjectForNewThreads?: boolean;
+  readonly lastThreadProject?: typeof ThreadProject.Type;
   readonly modelFavorites?: ReadonlyArray<{
     readonly provider: ProviderInstanceId;
     readonly model: string;
@@ -84,6 +123,7 @@ export interface Preferences {
   readonly threadListWorkingShelfExpanded?: boolean;
   readonly threadListFilters?: ThreadListFilters;
   readonly pullRequestListFilters?: PullRequestListPreferences;
+  readonly workspaceSelections?: WorkspaceSelections;
 }
 
 export class MobilePreferencesLoadError extends Schema.TaggedError<MobilePreferencesLoadError>()(
@@ -125,6 +165,8 @@ export class MobilePreferencesStore extends Context.Service<
 
 function sanitizePreferences(parsed: Preferences): Preferences {
   const preferences: {
+    navigationTabOrder?: readonly string[];
+    hiddenNavigationTabs?: readonly string[];
     pullRequestHideTestFiles?: boolean;
     pullRequestMergeMethod?: PullRequestMergeMethod;
     liveActivitiesEnabled?: boolean;
@@ -137,6 +179,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     markdownFontSize?: number;
     codeFontSize?: number | null;
     codeWordBreak?: boolean;
+    mathRenderingEnabled?: boolean;
     connectOnboardingOptOutAccounts?: ReadonlyArray<string>;
     collapsedProjectGroups?: readonly string[];
     dismissedDatabaseStorageNotices?: readonly string[];
@@ -147,13 +190,28 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     projectGroupingMode?: SidebarProjectGroupingMode;
     planModeEnabled?: boolean;
     workingShelfEnabled?: boolean;
+    useLastProjectForNewThreads?: boolean;
+    lastThreadProject?: typeof ThreadProject.Type;
     modelFavorites?: Preferences["modelFavorites"];
     threadListSettledShelfExpanded?: boolean;
     threadListSnoozedShelfExpanded?: boolean;
     threadListWorkingShelfExpanded?: boolean;
     threadListFilters?: ThreadListFilters;
     pullRequestListFilters?: PullRequestListPreferences;
+    workspaceSelections?: WorkspaceSelections;
   } = {};
+
+  if (Array.isArray(parsed.hiddenNavigationTabs)) {
+    preferences.hiddenNavigationTabs = parsed.hiddenNavigationTabs.filter(
+      (tab): tab is string => typeof tab === "string",
+    );
+  }
+
+  if (Array.isArray(parsed.navigationTabOrder)) {
+    preferences.navigationTabOrder = parsed.navigationTabOrder.filter(
+      (tab): tab is string => typeof tab === "string",
+    );
+  }
 
   if (typeof parsed.pullRequestHideTestFiles === "boolean") {
     preferences.pullRequestHideTestFiles = parsed.pullRequestHideTestFiles;
@@ -206,6 +264,8 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     preferences.codeFontSize = parsed.codeFontSize;
   }
   if (typeof parsed.codeWordBreak === "boolean") preferences.codeWordBreak = parsed.codeWordBreak;
+  if (typeof parsed.mathRenderingEnabled === "boolean")
+    preferences.mathRenderingEnabled = parsed.mathRenderingEnabled;
   if (Array.isArray(parsed.connectOnboardingOptOutAccounts)) {
     preferences.connectOnboardingOptOutAccounts = parsed.connectOnboardingOptOutAccounts.filter(
       (account): account is string => typeof account === "string",
@@ -252,6 +312,12 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   if (typeof parsed.workingShelfEnabled === "boolean") {
     preferences.workingShelfEnabled = parsed.workingShelfEnabled;
   }
+  if (typeof parsed.useLastProjectForNewThreads === "boolean") {
+    preferences.useLastProjectForNewThreads = parsed.useLastProjectForNewThreads;
+  }
+  if (isThreadProject(parsed.lastThreadProject)) {
+    preferences.lastThreadProject = parsed.lastThreadProject;
+  }
   if (Array.isArray(parsed.modelFavorites)) {
     preferences.modelFavorites = parsed.modelFavorites.filter(
       (favorite) =>
@@ -277,6 +343,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (isPullRequestListPreferences(parsed.pullRequestListFilters)) {
     preferences.pullRequestListFilters = parsed.pullRequestListFilters;
+  }
+  if (isWorkspaceSelections(parsed.workspaceSelections)) {
+    preferences.workspaceSelections = parsed.workspaceSelections;
   }
   return preferences;
 }

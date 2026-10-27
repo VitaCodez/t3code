@@ -102,23 +102,17 @@ export const assertTargetWithinLimits = (
     Effect.asVoid,
   );
 
-/**
- * A thread caller acts only while it owns a live run of a thread that is not
- * archived, so a provider token that outlived its session cannot act. An
- * OAuth client has no run; its session and ceiling are its authority.
- */
+/** Thread callers need a live run or its background subagent in an unarchived thread. OAuth clients rely on their session and ceiling. */
 export function assertLiveCaller({ caller, scope }: Caller) {
   if (caller === undefined) return Effect.void;
-  return caller.archivedAt !== null ||
-    caller.activeRunId === null ||
-    caller.providerInstanceId !== scope.thread?.providerInstanceId
-    ? Effect.fail(
+  return OrchestrationMcp.isLiveCallerShell(caller, scope.thread?.providerInstanceId)
+    ? Effect.void
+    : Effect.fail(
         new OrchestratorMcpFailure({
           code: "parent_not_active",
           message: "The calling provider no longer owns an active thread run.",
         }),
-      )
-    : Effect.void;
+      );
 }
 
 export const assertFullAccess = (context: Caller, message: string) =>
@@ -157,10 +151,11 @@ export const readThread = Effect.fn("mcp.readThread")(function* <
   const targetId = yield* resolveThreadId(context, threadId);
   const shell = yield* context.threads.getThreadShell(targetId).pipe(Effect.mapError(unavailable));
   if (shell === null || shell.deletedAt !== null) {
-    return yield* new OrchestratorMcpFailure({
-      code: "thread_not_found",
-      message: "The thread was not found.",
-    });
+    return yield* OrchestrationMcp.threadNotFound(
+      context.threads,
+      targetId,
+      "The thread was not found.",
+    );
   }
   const projection = yield* context.threads
     .getProjectThreadRecords({ projectId: shell.projectId, threadId: targetId }, fields, {

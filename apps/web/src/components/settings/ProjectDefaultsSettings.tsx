@@ -9,14 +9,17 @@ import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { useNavigate } from "@tanstack/react-router";
 
 import { mergeEnvironmentSettings } from "../../hooks/useSettings";
-import { getCustomModelOptionsByInstance } from "../../modelSelection";
+import {
+  getCustomModelOptionsByInstance,
+  resolveEffectiveDefaultModelSelection,
+} from "../../modelSelection";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
   resolveDefaultProviderModelSelection,
   sortProviderInstanceEntries,
 } from "../../providerInstances";
-import { useEnvironments } from "../../state/environments";
+import { useEnvironmentProviders, useEnvironments } from "../../state/environments";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { resolveEnvModeLabel, WORKTREE_SUBMODULES_LABELS } from "../BranchToolbar.logic";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
@@ -53,11 +56,21 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   const updateSettings = useUpdateScopedSettings();
   const navigate = useNavigate();
   const { environments } = useEnvironments();
+  const providersByEnvironment = useEnvironmentProviders();
   const representative = target
     ? environments.find((environment) => environment.environmentId === target.environmentId)
     : undefined;
-  const providers = representative?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
-  const selection = resolveDefaultProviderModelSelection(providers, settings.defaultModelSelection);
+  const providers =
+    (representative?.serverConfig
+      ? providersByEnvironment.get(representative.environmentId)
+      : undefined) ?? EMPTY_SERVER_PROVIDERS;
+  const storedSelection = resolveDefaultProviderModelSelection(
+    providers,
+    settings.defaultModelSelection,
+  );
+  const selection = storedSelection
+    ? resolveEffectiveDefaultModelSelection(settings, providers, storedSelection)
+    : null;
   const entries = sortProviderInstanceEntries(
     applyProviderInstanceSettings(
       deriveProviderInstanceEntries(providers),
@@ -76,8 +89,6 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
   const mixedPermissions = useScopedSettingsMixed(["defaultRuntimeMode"]);
   const PermissionIcon = runtimeModeConfig[settings.defaultRuntimeMode].icon;
   const mixedWorkspace = useScopedSettingsMixed(["defaultThreadEnvMode"]);
-  const mixedSubmodules = useScopedSettingsMixed(["worktreeSubmodules"]);
-  const mixedBrowser = useScopedSettingsMixed(["enableAgentBrowserAccess"]);
   const mixedAutoPull = useScopedSettingsMixed(["defaultAutoPull"]);
   const mixedAgentCredits = useScopedSettingsMixed(["removeAgentCreditsOnMerge"]);
   const mixedMergeMethod = useScopedSettingsMixed(["pullRequestMergeMethod"]);
@@ -94,16 +105,16 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       const environment = environments.find(
         (entry) => entry.environmentId === candidate.environmentId,
       );
-      const config = environment?.serverConfig;
-      if (!config) continue;
+      const providers = providersByEnvironment.get(candidate.environmentId);
+      if (!environment?.serverConfig || !providers) continue;
       const entry = applyProviderInstanceSettings(
-        deriveProviderInstanceEntries(config.providers),
+        deriveProviderInstanceEntries(providers),
         candidate.settings,
         candidate.projectId,
       ).find((option) => option.instanceId === instanceId);
       const options = getCustomModelOptionsByInstance(
         mergeEnvironmentSettings(candidate.settings, settings),
-        config.providers,
+        providers,
       ).get(instanceId);
       if (
         !entry?.enabled ||
@@ -136,14 +147,12 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       description={
         isProjectScope
           ? "Model for new threads in this project."
-          : "Default model for new threads. Projects can override it."
-      }
-      status={
-        unavailable || mixedModel || modelSource === "project"
-          ? undefined
-          : settings.defaultModelSelection === null
-            ? "Automatic"
-            : undefined
+          : !unavailable &&
+              !mixedModel &&
+              modelSource !== "project" &&
+              settings.defaultModelSelection === null
+            ? "Default model for new threads, selected automatically. Projects can override it."
+            : "Default model for new threads. Projects can override it."
       }
       resetAction={
         settings.defaultModelSelection !== null ? (
@@ -179,8 +188,6 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                 provider={activeEntry.driverKind}
                 models={activeEntry.models}
                 model={selection.model}
-                prompt=""
-                onPromptChange={() => {}}
                 modelOptions={selection.options ?? []}
                 allowPromptInjectedEffort={false}
                 planModeEnabled={settings.planModeEnabled}
@@ -247,20 +254,8 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
 
   return (
     <SettingsSection
-      id={
-        category === "general" || category === "project"
-          ? "project-defaults"
-          : category === "integrations"
-            ? "browser-access"
-            : "source-control-defaults"
-      }
-      title={
-        category === "general" || category === "project"
-          ? "New threads"
-          : category === "integrations"
-            ? "Browser"
-            : "Repositories"
-      }
+      id={category === "source-control" ? "source-control-defaults" : "project-defaults"}
+      title={category === "source-control" ? "Repositories" : "New threads"}
     >
       {category === "project" ? (
         <>
@@ -332,54 +327,8 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             }
           />
           {workspaceRow}
-          <SettingsRow
-            serverScoped
-            settingKeys={["worktreeSubmodules"]}
-            mixed={mixedSubmodules}
-            {...searchableSetting("worktree-submodules")}
-            description={
-              isProjectScope
-                ? "How new worktrees in this project populate git submodules."
-                : "How new worktrees populate git submodules. Projects and their t3.json can override it."
-            }
-            resetAction={
-              !isProjectScope && settings.worktreeSubmodules !== null ? (
-                <SettingResetButton
-                  label="worktree submodules"
-                  onClick={() => updateSettings({ worktreeSubmodules: null })}
-                />
-              ) : null
-            }
-            control={
-              <Select
-                value={mixedSubmodules ? null : (effective?.worktreeSubmodules ?? null)}
-                onValueChange={(value) => {
-                  if (isWorktreeSubmodules(value)) updateSettings({ worktreeSubmodules: value });
-                }}
-              >
-                <SelectTrigger size="sm" aria-label="Worktree submodules">
-                  <SelectValue>
-                    {(value: string | null) =>
-                      isWorktreeSubmodules(value)
-                        ? WORKTREE_SUBMODULES_LABELS[value]
-                        : unavailable
-                          ? "Unavailable"
-                          : "Mixed"
-                    }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  {WORKTREE_SUBMODULES_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {WORKTREE_SUBMODULES_LABELS[option]}
-                    </SelectItem>
-                  ))}
-                </SelectPopup>
-              </Select>
-            }
-          />
         </>
-      ) : category === "source-control" ? (
+      ) : (
         <>
           <SettingsRow
             serverScoped
@@ -415,7 +364,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             settingKeys={["removeAgentCreditsOnMerge"]}
             mixed={mixedAgentCredits}
             {...searchableSetting("remove-agent-credits-on-merge")}
-            description="Remove recognized agent credit lines from GitHub merge and squash messages, keeping human co-authors. Includes auto-merge. Excludes merge queues, stack merges, and existing commits."
+            description="Remove recognized agent credit lines from merge and squash messages on hosts that support it, keeping human co-authors. Includes auto-merge. Excludes merge queues, stack merges, and existing commits."
             resetAction={
               settings.removeAgentCreditsOnMerge ? (
                 <SettingResetButton
@@ -485,43 +434,68 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             }
           />
         </>
-      ) : (
-        <>
-          <SettingsRow
-            serverScoped
-            settingKeys={["enableAgentBrowserAccess"]}
-            mixed={mixedBrowser}
-            id={searchableSetting("agent-browser-access").id}
-            title="Agent browser access"
-            description={
-              isProjectScope
-                ? "Allow agents in this project to use the shared browser. Applies when the agent session next starts."
-                : "Allow agents to use the shared browser. Projects can override it."
-            }
-            resetAction={
-              settings.enableAgentBrowserAccess !==
-              DEFAULT_SERVER_SETTINGS.enableAgentBrowserAccess ? (
-                <SettingResetButton
-                  label="default browser access"
-                  onClick={() =>
-                    updateSettings({
-                      enableAgentBrowserAccess: DEFAULT_SERVER_SETTINGS.enableAgentBrowserAccess,
-                    })
-                  }
-                />
-              ) : null
-            }
-            control={
-              <Switch
-                aria-label="Agent browser access"
-                mixed={mixedBrowser}
-                checked={mixedBrowser ? false : settings.enableAgentBrowserAccess}
-                onCheckedChange={(enabled) => updateSettings({ enableAgentBrowserAccess: enabled })}
-              />
-            }
-          />
-        </>
       )}
     </SettingsSection>
+  );
+}
+
+export function WorktreeSubmodulesRow() {
+  const { scope, target, connectedEnvironments } = useSettingsScope();
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  const mixedSubmodules = useScopedSettingsMixed(["worktreeSubmodules"]);
+  const isProjectScope = scope.kind === "project" || scope.kind === "checkout";
+  const unavailable = connectedEnvironments.length === 0;
+  const effective = target
+    ? resolveProjectSettings(target.settings, null, null, null).settings
+    : null;
+
+  return (
+    <SettingsRow
+      serverScoped
+      settingKeys={["worktreeSubmodules"]}
+      mixed={mixedSubmodules}
+      {...searchableSetting("worktree-submodules")}
+      description={
+        isProjectScope
+          ? "How new worktrees in this project populate git submodules."
+          : "How new worktrees populate git submodules. Projects and their t3.json can override it."
+      }
+      resetAction={
+        !isProjectScope && settings.worktreeSubmodules !== null ? (
+          <SettingResetButton
+            label="worktree submodules"
+            onClick={() => updateSettings({ worktreeSubmodules: null })}
+          />
+        ) : null
+      }
+      control={
+        <Select
+          value={mixedSubmodules ? null : (effective?.worktreeSubmodules ?? null)}
+          onValueChange={(value) => {
+            if (isWorktreeSubmodules(value)) updateSettings({ worktreeSubmodules: value });
+          }}
+        >
+          <SelectTrigger size="sm" aria-label="Worktree submodules">
+            <SelectValue>
+              {(value: string | null) =>
+                isWorktreeSubmodules(value)
+                  ? WORKTREE_SUBMODULES_LABELS[value]
+                  : unavailable
+                    ? "Unavailable"
+                    : "Mixed"
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {WORKTREE_SUBMODULES_OPTIONS.map((option) => (
+              <SelectItem key={option} value={option}>
+                {WORKTREE_SUBMODULES_LABELS[option]}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      }
+    />
   );
 }

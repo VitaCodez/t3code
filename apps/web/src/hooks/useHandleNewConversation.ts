@@ -9,7 +9,8 @@ import { CONVERSATIONS_PROJECT_TITLE, isConversationsProject } from "../conversa
 import { resolveDefaultProviderModelSelection } from "../providerInstances";
 import { newProjectId } from "../lib/utils";
 import { useProjects } from "../state/entities";
-import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
+import { useEnvironmentProviders, useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
+import { EMPTY_SERVER_PROVIDERS } from "../state/server";
 import { projectEnvironment } from "../state/projects";
 import { useAtomCommand } from "../state/use-atom-command";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
@@ -19,6 +20,7 @@ export function useHandleNewConversation() {
   const projects = useProjects();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const { environments } = useEnvironments();
+  const providersByEnvironment = useEnvironmentProviders();
   const handleNewThread = useNewThreadHandler();
   const createProject = useAtomCommand(projectEnvironment.create, { reportFailure: false });
 
@@ -34,8 +36,7 @@ export function useHandleNewConversation() {
       return;
     }
 
-    const env = environments.find((e) => e.environmentId === primaryEnvironmentId);
-    const providers = env?.serverConfig?.providers ?? [];
+    const providers = providersByEnvironment.get(primaryEnvironmentId) ?? EMPTY_SERVER_PROVIDERS;
     const cwd = "~/.t3/conversations";
 
     const projectId = newProjectId();
@@ -65,5 +66,5 @@ export function useHandleNewConversation() {
     }
 
     await handleNewThread(scopeProjectRef(primaryEnvironmentId, projectId));
-  }, [createProject, environments, handleNewThread, primaryEnvironmentId, projects]);
+  }, [createProject, handleNewThread, primaryEnvironmentId, projects, providersByEnvironment]);
 }

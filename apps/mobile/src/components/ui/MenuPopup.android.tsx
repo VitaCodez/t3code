@@ -8,7 +8,8 @@ import {
   Text,
 } from "@expo/ui/jetpack-compose";
 import { defaultMinSize, padding, size, width } from "@expo/ui/jetpack-compose/modifiers";
-import { View } from "react-native";
+import type { MenuAction } from "@react-native-menu/menu";
+import { Pressable } from "react-native";
 import { resolveScaledTextRole } from "../../lib/appearancePreferences";
 
 import { useAndroidControlSizing } from "./useAndroidControlSizing";
@@ -16,15 +17,22 @@ import { useAppearancePreferences } from "../../features/settings/appearance/App
 import type { MenuPopupProps } from "./MenuPopup";
 import { isAppSymbolName, SymbolView, type AppSymbolName } from "./AppSymbol";
 
+// The Compose glyph host consumes touches; run the action here and keep accessibility on the row.
 function MenuIcon(props: {
   readonly name: AppSymbolName;
+  readonly color?: MenuAction["imageColor"];
+  readonly onPress: () => void;
   readonly destructive?: boolean;
   readonly disabled?: boolean;
 }) {
   const { iconSize } = useAndroidControlSizing();
   return (
     <RNHostView matchContents modifiers={[size(iconSize, iconSize)]}>
-      <View
+      <Pressable
+        accessible={false}
+        focusable={false}
+        disabled={props.disabled}
+        onPress={props.onPress}
         style={{ width: iconSize, height: iconSize }}
         importantForAccessibility="no-hide-descendants"
       >
@@ -32,20 +40,21 @@ function MenuIcon(props: {
           name={props.name}
           size={iconSize}
           type="monochrome"
-          tintColorClassName={
-            props.disabled
-              ? "accent-icon-subtle"
-              : props.destructive
-                ? "accent-danger-foreground"
-                : "accent-foreground"
-          }
+          {...(typeof props.color === "string" && !props.disabled
+            ? { tintColor: props.color }
+            : {
+                tintColorClassName: props.disabled
+                  ? "accent-icon-subtle"
+                  : props.destructive
+                    ? "accent-danger-foreground"
+                    : "accent-foreground",
+              })}
         />
-      </View>
+      </Pressable>
     </RNHostView>
   );
 }
 
-/** Native popup positioned at the original trigger, outside virtualized rows. */
 export function MenuPopup(props: MenuPopupProps) {
   const { appearance, themeVariables: colors } = useAppearancePreferences();
   const { scale, menuItemHeight } = useAndroidControlSizing();
@@ -60,7 +69,7 @@ export function MenuPopup(props: MenuPopupProps) {
       {props.parent ? (
         <DropdownMenuItem onClick={props.onBack} modifiers={itemModifiers}>
           <DropdownMenuItem.LeadingIcon>
-            <MenuIcon name="arrow.left" />
+            <MenuIcon name="arrow.left" onPress={props.onBack} />
           </DropdownMenuItem.LeadingIcon>
           <DropdownMenuItem.Text>
             <Text color={foreground} style={{ typography: "bodyLarge", ...body }}>
@@ -88,6 +97,8 @@ export function MenuPopup(props: MenuPopupProps) {
             <DropdownMenuItem.LeadingIcon>
               <MenuIcon
                 name={action.image}
+                color={action.imageColor}
+                onPress={() => props.onPress(action)}
                 destructive={action.attributes?.destructive}
                 disabled={action.attributes?.disabled}
               />
@@ -116,11 +127,19 @@ export function MenuPopup(props: MenuPopupProps) {
           </DropdownMenuItem.Text>
           {(action.subactions?.length ?? 0) > 0 ? (
             <DropdownMenuItem.TrailingIcon>
-              <MenuIcon name="chevron.right" disabled={action.attributes?.disabled} />
+              <MenuIcon
+                name="chevron.right"
+                onPress={() => props.onPress(action)}
+                disabled={action.attributes?.disabled}
+              />
             </DropdownMenuItem.TrailingIcon>
           ) : action.state === "on" ? (
             <DropdownMenuItem.TrailingIcon>
-              <MenuIcon name="checkmark" disabled={action.attributes?.disabled} />
+              <MenuIcon
+                name="checkmark"
+                onPress={() => props.onPress(action)}
+                disabled={action.attributes?.disabled}
+              />
             </DropdownMenuItem.TrailingIcon>
           ) : null}
         </DropdownMenuItem>

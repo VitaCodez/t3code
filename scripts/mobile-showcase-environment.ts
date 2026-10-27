@@ -21,18 +21,6 @@ export const SHOWCASE_SCENES = [
 ] as const;
 export type ShowcaseScene = (typeof SHOWCASE_SCENES)[number];
 
-const PROJECTOR_NAMES = [
-  "projection.projects",
-  "projection.threads",
-  "projection.thread-messages",
-  "projection.thread-proposed-plans",
-  "projection.thread-activities",
-  "projection.thread-sessions",
-  "projection.thread-turns",
-  "projection.checkpoints",
-  "projection.pending-approvals",
-] as const;
-
 const MODEL_SELECTION = JSON.stringify({ instanceId: "codex", model: "gpt-5.4" });
 const PROJECT_SCRIPTS = JSON.stringify([
   {
@@ -61,11 +49,11 @@ export const SHOWCASE_TERMINAL_BUFFER = [
   "",
   "  \u001b[32m→\u001b[0m  \u001b[2mLocal:\u001b[0m    \u001b[4;36mhttp://127.0.0.1:5173/\u001b[0m",
   "  \u001b[32m→\u001b[0m  \u001b[2mNetwork:\u001b[0m  \u001b[4;36mhttp://192.168.1.24:5173/\u001b[0m",
-  "  \u001b[32m→\u001b[0m  \u001b[2mProject:\u001b[0m  \u001b[1mt3code\u001b[0m \u001b[2m— ~/Code/t3code\u001b[0m",
+  "  \u001b[32m→\u001b[0m  \u001b[2mProject:\u001b[0m  \u001b[1mt3code\u001b[0m \u001b[2m(~/Code/t3code)\u001b[0m",
   "",
   "  \u001b[32m✓ 612 passed\u001b[0m   \u001b[33m△ 2 warnings\u001b[0m   \u001b[31m✗ 0 failed\u001b[0m",
   "",
-  "  \u001b[42;30m READY \u001b[0m \u001b[2mwatching for changes — press\u001b[0m \u001b[1mq\u001b[0m \u001b[2mto quit\u001b[0m",
+  "  \u001b[42;30m READY \u001b[0m \u001b[2mwatching for changes, press\u001b[0m \u001b[1mq\u001b[0m \u001b[2mto quit\u001b[0m",
   "",
   SHOWCASE_TERMINAL_PROMPT,
 ].join("\r\n");
@@ -394,23 +382,6 @@ function insertThread(
     );
   database
     .prepare(
-      `INSERT INTO projection_turns (
-        thread_id, turn_id, pending_message_id, assistant_message_id, state, requested_at,
-        started_at, completed_at, checkpoint_turn_count, checkpoint_ref, checkpoint_status,
-        checkpoint_files_json, source_proposed_plan_thread_id, source_proposed_plan_id
-      ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, NULL, '[]', NULL, NULL)`,
-    )
-    .run(
-      input.id,
-      turnId,
-      isWorking ? null : `${input.id}-answer`,
-      isWorking ? "running" : "completed",
-      minutesBefore(now, input.minutesAgo + 2),
-      minutesBefore(now, input.minutesAgo + 2),
-      isWorking ? null : updatedAt,
-    );
-  database
-    .prepare(
       `INSERT INTO projection_thread_sessions (
         thread_id, status, provider_name, provider_instance_id, provider_session_id,
         provider_thread_id, runtime_mode, active_turn_id, last_error, updated_at
@@ -419,19 +390,11 @@ function insertThread(
     .run(input.id, isWorking ? "running" : "ready", isWorking ? turnId : null, updatedAt);
 }
 
-// V1 tables this seed owns. `projection_projects` is not listed: V2 still
-// stores projects there, so the seed upserts its own rows instead. V2 clients
-// do not read the V1 thread rows; moving the seed to V2 is tracked in
-// https://github.com/pingdotgg/t3code/issues/15013.
+// V2 still owns projection_projects; upsert project rows without deleting them with V1 thread data.
 const SEEDED_V1_TABLES = [
-  "projection_pending_approvals",
-  "projection_thread_proposed_plans",
-  "projection_thread_activities",
   "projection_thread_messages",
   "projection_thread_sessions",
-  "projection_turns",
   "projection_threads",
-  "projection_state",
 ] as const;
 
 const SEEDED_PROJECTION_TABLES = [...SEEDED_V1_TABLES, "projection_projects"] as const;
@@ -481,10 +444,7 @@ function seedDatabase(
   threads: ReadonlyArray<(typeof SHOWCASE_THREADS)[number]>,
   now: number,
 ): void {
-  // The environment server is already running against this file and keeps
-  // writing (migrations, projections) while we seed, so the write lock is
-  // genuinely contended — without a busy timeout `BEGIN IMMEDIATE` fails
-  // instantly with SQLITE_BUSY on a loaded machine.
+  // The running server writes migrations/projections concurrently; wait for its lock instead of failing SQLITE_BUSY.
   const database = new NodeSqlite.DatabaseSync(dbPath, { timeout: 30_000 });
   try {
     database.exec("BEGIN IMMEDIATE");
@@ -558,67 +518,9 @@ function seedDatabase(
       }
     }
 
-    const turnId = `${SHOWCASE_THREAD_ID}-turn`;
-    const insertActivity = database.prepare(
-      `INSERT INTO projection_thread_activities (
-        activity_id, thread_id, turn_id, tone, kind, summary, payload_json, sequence, created_at
-      ) VALUES (?, ?, ?, 'tool', 'tool.completed', ?, ?, ?, ?)`,
-    );
-    insertActivity.run(
-      "trace-remote-handoff",
-      SHOWCASE_THREAD_ID,
-      turnId,
-      "Traced the remote handoff path",
-      JSON.stringify({
-        itemType: "command_execution",
-        title: "Traced the remote handoff path",
-        detail: "Three environments, one continuous workspace",
-        status: "completed",
-      }),
-      1,
-      minutesBefore(now, 8),
-    );
-    insertActivity.run(
-      "sync-command-center",
-      SHOWCASE_THREAD_ID,
-      turnId,
-      "Synced the command center",
-      JSON.stringify({
-        itemType: "file_change",
-        title: "Synced the command center",
-        detail: "2 files changed · instant handoffs · calm reconnects",
-        status: "completed",
-      }),
-      2,
-      minutesBefore(now, 6),
-    );
-    insertActivity.run(
-      "run-changed-suite",
-      SHOWCASE_THREAD_ID,
-      turnId,
-      "Ran the changed workspace",
-      JSON.stringify({
-        itemType: "command_execution",
-        title: "Ran the changed workspace",
-        detail: "612 tests passed · 3 environments online",
-        status: "completed",
-      }),
-      3,
-      minutesBefore(now, 4),
-    );
-
-    for (const [index, projector] of PROJECTOR_NAMES.entries()) {
-      database
-        .prepare(
-          "INSERT INTO projection_state (projector, last_applied_sequence, updated_at) VALUES (?, ?, ?)",
-        )
-        .run(projector, index + 1, minutesBefore(now, 1));
-    }
     database.exec("COMMIT");
   } catch (error) {
-    // A failed BEGIN (or an error SQLite already auto-rolled back) leaves no
-    // transaction, and the rollback's own "cannot rollback" error would then
-    // replace the one that actually explains the failure.
+    // Failed BEGIN or automatic rollback leaves no transaction; preserve the original error if rollback fails.
     try {
       database.exec("ROLLBACK");
     } catch {}
@@ -669,8 +571,7 @@ export async function seedShowcaseEnvironment(input: {
         });
       }),
   );
-  // The environment server begins listening before it finishes migrating the
-  // database, so wait for the schema before deleting from and reseeding it.
+  // Listening precedes migration completion; wait for the schema before reseeding.
   await waitForSeedableSchema(dbPath);
   seedDatabase(dbPath, workspaceRoots, projects, threads, now);
 

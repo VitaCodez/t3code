@@ -1,8 +1,9 @@
+import { Button } from "../../components/ui/Button";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { ChatGptUsageSummary } from "./ChatGptUsageSummary";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { EnvironmentId, USAGE_CONTRACT_VERSION, type UsageProviderKind } from "@t3tools/contracts";
-import { type RouteProp, useIsFocused, useNavigation, useRoute } from "@react-navigation/native";
+import { type RouteProp, useIsFocused, useRoute } from "@react-navigation/native";
 import { cursorKeychainAccessEnvironments } from "@t3tools/client-runtime/state/usage";
 import {
   updatingProvidersLabel,
@@ -27,19 +28,13 @@ import {
   formatUsd,
   makeWindow,
 } from "@t3tools/shared/usageFormat";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, RefreshControl, View } from "react-native";
-import Animated, {
-  FadeIn,
-  ReduceMotion,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withTiming,
-} from "react-native-reanimated";
+import Animated, { FadeIn, ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
+import { useReduceMotionEnabled } from "../../lib/appState";
 import { AppText as Text } from "../../components/ui/AppText";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import { cn } from "../../lib/cn";
@@ -54,6 +49,8 @@ import { useRefreshLimits } from "./UsageLimitsSection";
 import { UsageLimitsSection } from "./UsageLimitsPooled";
 import { Menu } from "../../components/ui/Menu";
 import { SymbolView } from "../../components/ui/AppSymbol";
+import { NativeStackScreenOptions } from "../../native/StackHeader";
+import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
 import type { UsageChartMetric } from "./usageChartData";
 import { PROVIDER_LABEL, useProviderColors, useUsageMixColors } from "./usageProviders";
 
@@ -79,22 +76,28 @@ const CHART_HEIGHT = 180;
 const providerLabel = (provider: UsageProviderKind) => PROVIDER_LABEL[provider];
 const CURSOR_KEYCHAIN_COPY = "Requires access to your Cursor login in macOS Keychain.";
 
-export function UsageRouteScreen() {
+export function UsageRouteScreen(props: { readonly workspace?: boolean }) {
   const route = useRoute<RouteProp<{ Usage: { tab?: string } | undefined }, "Usage">>();
-  const navigation = useNavigation();
+  return <UsageScreen workspace={props.workspace} tabParam={route.params?.tab} />;
+}
+
+function UsageScreen(props: {
+  readonly workspace?: boolean;
+  readonly tabParam: string | undefined;
+}) {
   const insets = useSafeAreaInsets();
   const [selection, setSelection] = useState(() => ({
-    params: route.params,
-    tab: (route.params?.tab === "usage" ? "usage" : "limits") as UsageTab,
+    params: props.tabParam,
+    tab: (props.tabParam === "usage" ? "usage" : "limits") as UsageTab,
   }));
-  if (selection.params !== route.params) {
+  if (selection.params !== props.tabParam) {
     setSelection({
-      params: route.params,
-      tab: route.params?.tab === "usage" ? "usage" : "limits",
+      params: props.tabParam,
+      tab: props.tabParam === "usage" ? "usage" : "limits",
     });
   }
   const { tab } = selection;
-  const setTab = (tab: UsageTab) => setSelection({ params: route.params, tab });
+  const setTab = (tab: UsageTab) => setSelection({ params: props.tabParam, tab });
   const [windowSelection, setWindowSelection] = useState(() => ({
     days: 30,
     window: makeWindow(30),
@@ -135,29 +138,19 @@ export function UsageRouteScreen() {
     (environment) => environment.canReadDiagnostics,
   );
 
-  const days = useMemo(
-    () => enumerateDays(window.sinceDay, window.untilDay),
-    [window.sinceDay, window.untilDay],
-  );
-  const chartDays = useMemo(
-    () =>
-      isPast24Hours && window.sinceTime !== undefined && window.untilTime !== undefined
-        ? enumerateHourStarts(window.sinceTime, window.untilTime)
-        : days,
-    [days, isPast24Hours, window.sinceTime, window.untilTime],
-  );
-  const chartTotals = useMemo(
-    (): readonly DailyTotals[] =>
-      isPast24Hours
-        ? merged.hourly.map((hour) => ({
-            day: hour.hourStart,
-            costUsd: hour.costUsd,
-            totalTokens: hour.totalTokens,
-            byProvider: hour.byProvider,
-          }))
-        : merged.daily,
-    [isPast24Hours, merged.daily, merged.hourly],
-  );
+  const days = enumerateDays(window.sinceDay, window.untilDay);
+  const chartDays =
+    isPast24Hours && window.sinceTime !== undefined && window.untilTime !== undefined
+      ? enumerateHourStarts(window.sinceTime, window.untilTime)
+      : days;
+  const chartTotals: readonly DailyTotals[] = isPast24Hours
+    ? merged.hourly.map((hour) => ({
+        day: hour.hourStart,
+        costUsd: hour.costUsd,
+        totalTokens: hour.totalTokens,
+        byProvider: hour.byProvider,
+      }))
+    : merged.daily;
 
   const [refreshingUsage, setRefreshingUsage] = useState(false);
   const refreshingRef = useRef(false);
@@ -196,71 +189,84 @@ export function UsageRouteScreen() {
     selectedEnvironmentIds === null
       ? "line.3.horizontal.decrease"
       : "line.3.horizontal.decrease.circle.fill";
-  const environmentActions = useMemo(
-    () => [
-      {
-        id: "all",
-        title: "All environments",
-        subtitle: undefined,
-        state: selectedEnvironmentIds === null ? ("on" as const) : ("off" as const),
-      },
-      ...environments.map((environment) => ({
-        id: environment.environmentId,
-        title: environment.label,
-        subtitle: usageEnvironmentStatus(environment, refreshingUsage),
-        state:
-          selectedEnvironmentIds === null || selectedEnvironmentIds.has(environment.environmentId)
-            ? ("on" as const)
-            : ("off" as const),
-      })),
-    ],
-    [environments, refreshingUsage, selectedEnvironmentIds],
-  );
-  const selectEnvironment = useCallback(
-    (value: string) => {
-      if (value === "all") {
-        setSelectedEnvironmentIds(null);
-        return;
-      }
-      const id = EnvironmentId.make(value);
-      setSelectedEnvironmentIds((selected) => toggleUsageEnvironment(selected, environments, id));
+  const environmentActions = [
+    {
+      id: "all",
+      title: "All environments",
+      subtitle: undefined,
+      state: selectedEnvironmentIds === null ? ("on" as const) : ("off" as const),
     },
-    [environments],
-  );
-  const environmentFilter = useMemo(
-    () =>
-      showEnvironmentFilter ? (
-        <Menu
-          accessible
-          accessibilityRole="button"
-          accessibilityLabel="Filter usage environments"
-          title="Environments"
-          actions={environmentActions}
-          onPressAction={({ nativeEvent }) => selectEnvironment(nativeEvent.event)}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Filter usage environments"
-            className={cn(
-              "items-center justify-center rounded-full",
-              Platform.OS === "ios" ? "size-[28px]" : "size-[44px]",
-            )}
-          >
-            <SymbolView name={filterIcon} size={22} tintColorClassName="accent-icon" />
-          </Pressable>
-        </Menu>
-      ) : null,
-    [showEnvironmentFilter, environmentActions, selectEnvironment, filterIcon],
-  );
-
-  useLayoutEffect(() => {
-    if (Platform.OS === "ios") {
-      navigation.setOptions({ headerRight: () => environmentFilter });
+    ...environments.map((environment) => ({
+      id: environment.environmentId,
+      title: environment.label,
+      subtitle: usageEnvironmentStatus(environment, refreshingUsage),
+      state:
+        selectedEnvironmentIds === null || selectedEnvironmentIds.has(environment.environmentId)
+          ? ("on" as const)
+          : ("off" as const),
+    })),
+  ];
+  const selectEnvironment = (value: string) => {
+    if (value === "all") {
+      setSelectedEnvironmentIds(null);
+      return;
     }
-  }, [navigation, environmentFilter]);
+    const id = EnvironmentId.make(value);
+    setSelectedEnvironmentIds((selected) => toggleUsageEnvironment(selected, environments, id));
+  };
+  const environmentFilter = showEnvironmentFilter ? (
+    <Menu
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel="Filter usage environments"
+      title="Environments"
+      actions={environmentActions}
+      onPressAction={({ nativeEvent }) => selectEnvironment(nativeEvent.event)}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Filter usage environments"
+        className={cn(
+          "items-center justify-center rounded-full",
+          Platform.OS === "ios" ? "size-[28px]" : "size-[44px]",
+        )}
+      >
+        <SymbolView name={filterIcon} size={22} tintColorClassName="accent-icon" />
+      </Pressable>
+    </Menu>
+  ) : null;
 
   return (
-    <SettingsScreen title="Usage" trailing={environmentFilter}>
+    <SettingsScreen title="Usage" trailing={environmentFilter} workspaceRoot={props.workspace}>
+      {Platform.OS === "ios" ? (
+        <NativeStackScreenOptions
+          optionsVersion={JSON.stringify({ showEnvironmentFilter, filterIcon, environmentActions })}
+          options={{
+            // A native menu item, unlike a custom view, moves into the Duo's vertical bar.
+            unstable_headerRightItems: () =>
+              showEnvironmentFilter
+                ? [
+                    withNativeGlassHeaderItem({
+                      accessibilityLabel: "Filter usage environments",
+                      icon: { name: filterIcon, type: "sfSymbol" },
+                      label: "",
+                      type: "menu",
+                      menu: {
+                        title: "Environments",
+                        items: environmentActions.map((action) => ({
+                          type: "action" as const,
+                          label: action.title,
+                          description: action.subtitle,
+                          state: action.state === "on" ? ("on" as const) : undefined,
+                          onPress: () => selectEnvironment(action.id),
+                        })),
+                      },
+                    }),
+                  ]
+                : [],
+          }}
+        />
+      ) : null}
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
@@ -391,15 +397,14 @@ function UsageUpdating({
   readonly label: string | null;
   readonly children: ReactNode;
 }) {
-  const opacity = useSharedValue(1);
-  useLayoutEffect(() => {
-    opacity.set(
-      dimmed
-        ? withDelay(150, withTiming(0.5, { duration: 150, reduceMotion: ReduceMotion.System }))
-        : withTiming(1, { duration: 150, reduceMotion: ReduceMotion.System }),
-    );
-  }, [opacity, dimmed]);
-  const dimStyle = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+  const reduceMotion = useReduceMotionEnabled();
+  // The delay keeps a quick refresh from flashing the content.
+  const dimStyle = {
+    opacity: dimmed ? 0.5 : 1,
+    transitionProperty: "opacity",
+    transitionDuration: reduceMotion ? 0 : 150,
+    transitionDelay: dimmed ? 150 : 0,
+  } as const;
 
   return (
     <View>
@@ -440,27 +445,22 @@ function CursorEnableAction({
   const [pending, setPending] = useState(false);
   const enable = async () => {
     setPending(true);
-    try {
-      const result = await updateSettings({
-        environmentId,
-        input: { patch: { cursorKeychainUsageEnabled: true } },
-      });
-      if (result._tag === "Success") onEnabled();
-    } finally {
-      setPending(false);
-    }
+    const result = await updateSettings({
+      environmentId,
+      input: { patch: { cursorKeychainUsageEnabled: true } },
+    }).finally(() => setPending(false));
+    if (result._tag === "Success") onEnabled();
   };
   return (
-    <Pressable
-      accessibilityRole="button"
+    <Button
+      label={buttonText}
+      tone="primary"
       accessibilityLabel={`Enable Cursor usage from ${label}`}
       accessibilityHint={CURSOR_KEYCHAIN_COPY}
       disabled={pending}
       onPress={() => void enable()}
-      className="rounded-full bg-primary px-4 py-2"
-    >
-      <Text className="text-sm font-medium text-primary-foreground">{buttonText}</Text>
-    </Pressable>
+      loading={pending}
+    />
   );
 }
 
@@ -570,13 +570,20 @@ function ChartCard(props: {
         </View>
       )}
 
-      <View className="flex-row items-center justify-between">
-        <Text className="text-xs text-foreground-tertiary">
-          {props.isPast24Hours
-            ? formatHourShort(props.days[0] ?? "", props.timeZone)
-            : formatDayShort(props.sinceDay)}
-        </Text>
-        <View className="flex-row items-center gap-4">
+      <View className="gap-2">
+        <View className="flex-row items-center justify-between">
+          <Text className="text-xs text-foreground-tertiary">
+            {props.isPast24Hours
+              ? formatHourShort(props.days[0] ?? "", props.timeZone)
+              : formatDayShort(props.sinceDay)}
+          </Text>
+          <Text className="text-xs text-foreground-tertiary">
+            {props.isPast24Hours
+              ? formatHourShort(props.days[props.days.length - 1] ?? "", props.timeZone)
+              : formatDayShort(props.untilDay)}
+          </Text>
+        </View>
+        <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
           {merged.providers.map((provider) => (
             <View key={provider.provider} className="flex-row items-center gap-1.5">
               <View
@@ -589,11 +596,6 @@ function ChartCard(props: {
             </View>
           ))}
         </View>
-        <Text className="text-xs text-foreground-tertiary">
-          {props.isPast24Hours
-            ? formatHourShort(props.days[props.days.length - 1] ?? "", props.timeZone)
-            : formatDayShort(props.untilDay)}
-        </Text>
       </View>
     </View>
   );
@@ -610,7 +612,7 @@ function ProviderSection(props: {
   const colors = useProviderColors();
   if (merged.providers.length === 0 && props.cursorAccessEnvironments.length === 0) return null;
 
-  // .sort() on a copy, not .toSorted(): Hermes doesn't ship the ES2023 method.
+  // Hermes lacks toSorted.
   const ordered = [...merged.providers].sort((a, b) =>
     metric === "cost" ? b.costUsd - a.costUsd : b.totalTokens - a.totalTokens,
   );
@@ -834,7 +836,7 @@ function ModelsSection(props: { readonly merged: MergedUsage; readonly metric: U
   const colors = useProviderColors();
   if (merged.models.length === 0) return null;
 
-  // .sort() on a copy, not .toSorted(): Hermes doesn't ship the ES2023 method.
+  // Hermes lacks toSorted.
   const ordered = [...merged.models].sort((a, b) =>
     metric === "cost"
       ? b.costUsd - a.costUsd || b.totalTokens - a.totalTokens

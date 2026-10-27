@@ -10,7 +10,7 @@ On web or desktop, open **Settings > Providers**, choose the environment that ru
 your project, and enable Antigravity. Install its runtime there, then choose
 **Sign in** and complete the browser sign-in. Wait for T3 Code to confirm
 account access and load models before starting a thread. Once the runtime is installed,
-you can also sign in from **Settings > Provider accounts** in the mobile app.
+you can also sign in from **Settings > Providers** in the mobile app.
 
 Installation continues if you leave settings or reconnect. Setup requires
 permission to operate the environment; update an older server if it does not offer
@@ -43,8 +43,8 @@ Choose **Sign-in method** in the Antigravity provider settings:
 | Gemini API key             | API key; choose Connect without a browser                                                    |
 | Agent Platform / Vertex AI | API key, or GCP project and location with Application Default Credentials on the environment |
 
-The Antigravity API key field is stored in plain text in settings on the
-environment. The agent uses the method and credentials selected for this instance;
+The environment stores the Antigravity API key outside its settings file, and
+clients only see whether one is saved. The agent uses the method and credentials selected for this instance;
 ambient `GEMINI_API_KEY` and Google credential variables do not override them.
 Changing the method stops the instance's sessions. Sign out before replacing an
 account.
@@ -134,7 +134,7 @@ until a session, a refresh, or a sign-out reports something new.
 
 To check access and reload models, use **Refresh provider status** in web or desktop
 provider settings, or **Refresh models** in mobile thread settings. If asked to
-sign in again, use provider settings on web or desktop, or **Provider accounts** on mobile.
+sign in again, use provider settings on web or desktop, or **Settings > Providers** on mobile.
 
 If Google reports `SUBSCRIPTION_REQUIRED`, an account restriction, or a usage limit,
 follow the provider's message and any retry time. See [Google's account plans][plans]

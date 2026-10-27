@@ -47,12 +47,23 @@ A connected server reports the LAN and tailnet addresses it is bound to, and the
 client saves them as learned routes. A learned route reuses the credential of
 the route it was learned over: the T3 Connect access token, which is not bound
 to an origin because each DPoP proof names the URL it signs, or the paired
-bearer token. Learned routes the server stops reporting are dropped, which is
-how a changed LAN address replaces the old one; routes the user saved are never
-touched. The reported addresses are hints like any advertised endpoint, so a
+bearer token. A paired token only learns a plain HTTP address off the tailnet
+when it was itself paired over plain HTTP, so a token paired over HTTPS never
+starts travelling unencrypted. Learned routes the server stops reporting are
+dropped, which is how a changed LAN address replaces the old one; routes the
+user saved are never touched. The reported addresses are hints like any advertised endpoint, so a
 learned route still has to answer as this environment before it is used.
 
-GitHub routing trust covers the whole route list. Adding or changing a route
+A background service with no configured host is what makes this work for
+headless machines. It listens on every IPv4 interface and closes each
+connection unless both addresses of the direct peer are loopback, private, or
+tailnet IPv4. That keeps a VPS's public address closed, including a cloud VM
+whose public address is NATed to a private interface. It is not a firewall:
+T3 Connect and Tailscale Serve reach the server over loopback by design, and a
+proxy that rewrites the source address looks private. One listener per address would
+miss a DHCP change, and the wildcard keeps the reported addresses current.
+
+Pull request routing trust covers the whole route list. Adding or changing a route
 revokes it; reordering does not, because the same addresses remain trusted.
 
 ## Hosted web is a client
