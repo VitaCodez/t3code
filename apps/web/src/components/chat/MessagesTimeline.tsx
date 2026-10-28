@@ -935,14 +935,28 @@ const ConversationTimeline = memo(function ConversationTimeline({
     }
   };
 
-  const handleScroll = () => {
+  const scrollMeasureFrameRef = useRef<number | null>(null);
+  const measureScroll = useStableCallback(() => {
     if (restoringThreadPosition || listRef.current?.getState?.().data !== rows) return;
     const isAtEnd = rememberPosition(liveFollowEnabled && !anchoredEndSpace);
     if (isAtEnd !== undefined && !citationPositioning) {
       onIsAtEndChange(isAtEnd);
     }
     reportContentOverflow();
-    scheduleMinimapRefresh();
+    if (minimapRefreshFrameRef.current !== null) {
+      cancelAnimationFrame(minimapRefreshFrameRef.current);
+      minimapRefreshFrameRef.current = null;
+    }
+    refreshMinimap();
+  });
+  // Scroll events outpace frames on high-refresh displays and wheel bursts;
+  // measure once per frame instead of forcing layout per event.
+  const handleScroll = () => {
+    if (scrollMeasureFrameRef.current !== null) return;
+    scrollMeasureFrameRef.current = requestAnimationFrame(() => {
+      scrollMeasureFrameRef.current = null;
+      measureScroll();
+    });
   };
 
   const handleItemSizeChanged = () => {
@@ -976,7 +990,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     if (laidOutData === rows) {
       setSettlingListIdentity((current) => (current === listIdentityKey ? null : current));
     }
-    handleScroll();
+    measureScroll();
   });
   // The content lane only changes width with the viewport or the chat width
   // setting, never with streamed content; measuring per content frame would
@@ -1152,6 +1166,10 @@ const ConversationTimeline = memo(function ConversationTimeline({
       if (minimapRefreshFrameRef.current !== null) {
         cancelAnimationFrame(minimapRefreshFrameRef.current);
         minimapRefreshFrameRef.current = null;
+      }
+      if (scrollMeasureFrameRef.current !== null) {
+        cancelAnimationFrame(scrollMeasureFrameRef.current);
+        scrollMeasureFrameRef.current = null;
       }
       listRef.current = null;
       registerTimeline?.(null);
