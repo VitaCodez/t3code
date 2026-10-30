@@ -1,4 +1,4 @@
-# T3 Code currect version: v0.1.3
+# T3 Code currect version: v0.1.5
 
 > [!IMPORTANT]
 > **Fork & Attribution Notice:**  
@@ -14,150 +14,28 @@
 
 ---
 
-T3 Code is an "agent harness control surface". It enables control of the agents on your machine with a best-in-class mobile app ([iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824), [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)), [web app](https://app.t3.codes) and [Electron-based desktop app](https://t3.codes).
+## What is T3 Code?
 
-Works with your subscriptions on Claude Code, Codex, Cursor, Grok Build, OpenCode, and Google Antigravity. If they're set up on your computer, T3 Code can control them.
+T3 Code is an open source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely.
 
-## "Wait, what are you selling me?"
+### Supported agent models
 
-Nothing. We built T3 Code because we wanted the best possible development experience with agents. We were inspired by existing solutions like the Codex desktop app, Conductor, Claude Desktop and Cursor Glass, but none met our bar.
+T3 Code connects directly to the providers you already use. There are no subscriptions, markups, or middleman servers.
 
-We wanted something performant, remote-ready, and truly open. If we ever go the wrong direction, we want you to have everything you need to fork and build the editor that you want.
+- **OpenCode** (native support): Claude Opus 5.5, Claude Sonnet 5.5, DeepSeek V4.1 Flash, Gemini 3.8 Flash, and more
+- **Claude Agent**: Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5
+- **Codex**: GPT-5.3-Codex, GPT-5.3-Codex-Spark, and more
+- **Antigravity**: Gemini 3.8 Flash
+- **Pi**: Gemini 3.5 Flash, Gemini 3.5 Pro
+- **Grok**: Grok 4
+- **Cursor**: Use models from your Cursor plan inside T3 Code
 
-## Installation
+### Features
 
-> [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, Grok Build, OpenCode, and Antigravity. Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
-> - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-> - Antigravity: enable it in Settings, then use **Install Antigravity** and **Sign in with Google**. No CLI is required.
-
-### Command line
-
-```bash
-curl -fsSL https://t3.codes/install.sh | sh
-```
-
-On Windows, in PowerShell:
-
-```powershell
-irm https://t3.codes/install.ps1 | iex
-```
-
-Then run `t3` to start the server and open the local web app. `t3 service install` keeps it running in the background, `t3 update` moves to a newer release, and `t3 --help` has the full reference.
-
-To try it once without installing, run `npx t3@latest` instead.
-
-### Desktop app
-
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
-
-#### Windows (`winget`)
-
-```bash
-winget install T3Tools.T3Code
-```
-
-#### Windows (`scoop`)
-
-```bash
-scoop install extras/t3code
-```
-
-#### macOS (Homebrew)
-
-```bash
-brew install --cask t3-code
-```
-
-#### Debian, Ubuntu (`.deb`)
-
-Download the `.deb` from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), then:
-
-```bash
-sudo apt install ./T3-Code-*.deb
-```
-
-#### Arch Linux (AUR)
-
-Stable:
-
-```bash
-yay -S t3code-bin
-```
-
-Nightly:
-
-```bash
-yay -S t3code-nightly-bin
-```
-
-The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
-
-## Some notes
-
-We are very very early in this project. Expect bugs.
-
-We are (mostly) not accepting contributions yet. Small fixes may be considered. Big features will not be.
-
-## Documentation
-
-Full docs live in [docs/](./docs). There's no docs site yet.
-
-- [FAQ](./docs/user/faq.md)
-- [Install and first run](./docs/user/install.md)
-- [Permission modes](./docs/user/permission-modes.md)
-- [Keyboard shortcuts](./docs/user/keybindings.md)
-- [Project settings](./docs/user/project-settings.md)
-- [Appearance preferences](./docs/user/appearance.md)
-- [Remote access from a phone or another machine](./docs/user/remote-access.md)
-- [Connect Claude Code, Codex, ChatGPT and other agents over MCP](./docs/user/outside-agents.md)
-- [Keeping app and server in sync](./docs/user/updating.md)
-- [Source control integrations](./docs/user/source-control.md)
-- Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)
-- [Run T3 Code as a background service](./docs/user/background-service.md)
-
-Building from source? Start at [docs/internals/overview.md](./docs/internals/overview.md).
-
-## If you REALLY want to contribute still.... read this first
-
-### Install `vp`
-
-T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
-
-#### macOS / Linux
-
-```bash
-curl -fsSL https://vite.plus | bash
-```
-
-#### Windows
-
-```bash
-irm https://vite.plus/ps1 | iex
-```
-
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
-
-### Install dependencies
-
-```bash
-vp i
-```
-
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before reporting a bug or opening a PR.
-
-Have a feature request? Start an [Ideas discussion](https://github.com/pingdotgg/t3code/discussions/categories/ideas).
-
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
-
-## License & Credits
-
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
-
-- Original T3 Code: Copyright (c) 2026 T3 Tools Inc. / [pingdotgg/t3code](https://github.com/pingdotgg/t3code)
-- Antigravity integration, LaTeX support & custom modifications: Copyright (c) 2026 Vita Skacel
+- **Review every change**: Unified diffs, side-by-side diffs, and whole-file views with syntax highlighting.
+- **Run terminal commands**: Agents can run builds, tests, and scripts in your project.
+- **Browse the web**: Built-in browser lets agents inspect pages, test apps, and take screenshots.
+- **Drive mobile apps**: Connect to iOS Simulators and Android Emulators to test mobile apps directly.
+- **Connect anywhere**: Secure end-to-end encrypted remote connections to access your workspaces from another desktop, browser, or mobile device.
+- **Run parallel agents**: Run multiple agents in parallel across multiple projects and workspaces.
+- **Multiple source control providers**: GitHub and GitLab support with pull request creation, stack visualization, and automatic reviews.
