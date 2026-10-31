@@ -323,7 +323,6 @@ const ConversationTimeline = memo(function ConversationTimeline({
   onRespondToApproval,
   citationRequest = null,
   citationHistory = CITED_HISTORY_LOADING,
-  onCiteAssistantText,
   isWorking,
   runlessWorkActive = false,
   activeTurnStartedAt = null,
@@ -941,6 +940,15 @@ const ConversationTimeline = memo(function ConversationTimeline({
     }
     scheduleMinimapRefresh();
   });
+  // Scroll events outpace frames on high-refresh displays and wheel bursts;
+  // measure once per frame instead of forcing layout per event.
+  const handleScroll = () => {
+    if (scrollMeasureFrameRef.current !== null) return;
+    scrollMeasureFrameRef.current = requestAnimationFrame(() => {
+      scrollMeasureFrameRef.current = null;
+      measureScroll();
+    });
+  };
 
   const handleItemSizeChanged = () => {
     if (disclosurePinsEndRef.current) {
