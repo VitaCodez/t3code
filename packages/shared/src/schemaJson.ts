@@ -20,7 +20,7 @@ export const decodeJsonResult = <S extends Schema.Codec<unknown, unknown, never,
 
 const decodeJsonString = Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown));
 
-export function stripCommentsAndTrailingCommas(input: string): string {
+function stripCommentsAndTrailingCommas(input: string): string {
   const len = input.length;
   let result = "";
   let lastSliceStart = 0;

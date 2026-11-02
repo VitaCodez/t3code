@@ -18,7 +18,6 @@ import {
 import {
   CHAT_MARKDOWN_REMARK_PLUGINS,
   CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS,
-  CHAT_MARKDOWN_REHYPE_PLUGINS,
   createChatMarkdownRehypePlugins,
 } from "@t3tools/shared/markdownPipeline";
 import { useAtomValue } from "@effect/atom-react";
@@ -377,18 +376,6 @@ function remarkFilterInvalidInlineMath() {
   };
 }
 
-const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_MATH = [
-  remarkMath,
-  remarkFilterInvalidInlineMath,
-  ...CHAT_MARKDOWN_REMARK_PLUGINS,
-];
-
-const CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS_AND_MATH = [
-  remarkMath,
-  remarkFilterInvalidInlineMath,
-  ...CHAT_MARKDOWN_REMARK_PLUGINS_WITH_BREAKS,
-];
-
 const GITHUB_ALERT_PRESENTATIONS: Record<
   string,
   { label: string; Icon: typeof InfoIcon; borderClassName: string; titleClassName: string }
@@ -714,7 +701,7 @@ function useChatMarkdownState({
   const openDeferredMarkdownLink = useOpenLink(threadRef);
   // Subscribe so hydrated settings apply before the anchor synchronously decides whether to intercept _blank.
   const linkTargetPreference = useClientSettings((settings) => settings.browserLinkTarget);
-  const mathEnabled = useClientSettings((settings) => settings.mathRenderingEnabled);
+  const mathEnabled = useClientSettings((settings) => !settings.mathRenderingDisabled);
   const resolveThreadPullRequest = (
     href: string,
   ): (ThreadPullRequestKey & { readonly url: string }) | null => {

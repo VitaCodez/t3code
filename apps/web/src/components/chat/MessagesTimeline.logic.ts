@@ -77,7 +77,6 @@ import { isWindowsAbsolutePath } from "@t3tools/shared/path";
 const TIMELINE_MINIMAP_ITEM_SPACING = 8;
 export const TIMELINE_MINIMAP_MIN_ITEMS = 1;
 const TIMELINE_MINIMAP_MAX_HEIGHT_CSS = "calc(100vh - 18rem)";
-const TIMELINE_CONTENT_MAX_WIDTH = 768;
 const TIMELINE_MINIMAP_PERSISTENT_GUTTER = 48;
 
 function timelineEntryRunId(entry: TimelineEntry): RunId | null {
@@ -332,10 +331,6 @@ export function resolveTimelineIsAtEnd(state: TimelineEndState | undefined): boo
   }
   // LegendList double-subtracts the composer inset, so its isAtEnd is only a fallback.
   return contentLength - scroll - scrollLength <= TIMELINE_FOLLOW_REARM_THRESHOLD_PX;
-}
-
-export function shouldPreserveAssistantLineBreaks(text: string): boolean {
-  return /^â… Insight(?:\s|â”€)/mu.test(text);
 }
 
 export function resolveTimelineMinimapHeightStyle(itemCount: number): string {

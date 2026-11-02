@@ -169,7 +169,7 @@ function normalizeRateKey(model: string): string {
  * Strips a `provider/` prefix and lowercases, since transcripts are
  * inconsistent about casing.
  */
-export function normalizeModelName(model: string): string {
+function normalizeModelName(model: string): string {
   const bare = bareModelName(normalizeRateKey(model));
   const geminiMatch = bare.match(/gemini[\s-]*([0-9.]+)(?:[\s-]+(flash|pro))?/i);
   if (geminiMatch) {

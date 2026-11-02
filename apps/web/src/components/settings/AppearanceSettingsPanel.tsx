@@ -315,12 +315,12 @@ export function AppearanceSettingsPanel() {
           {...searchableSetting("math-rendering")}
           description="Typeset LaTeX math, such as $x^2$ or \[x^2\], in messages and Markdown previews. The composer keeps TeX source editable."
           resetAction={
-            settings.mathRenderingEnabled !== DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled ? (
+            settings.mathRenderingDisabled !== DEFAULT_UNIFIED_SETTINGS.mathRenderingDisabled ? (
               <SettingResetButton
                 label="math rendering"
                 onClick={() =>
                   updateSettings({
-                    mathRenderingEnabled: DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled,
+                    mathRenderingDisabled: DEFAULT_UNIFIED_SETTINGS.mathRenderingDisabled,
                   })
                 }
               />
@@ -328,10 +328,8 @@ export function AppearanceSettingsPanel() {
           }
           control={
             <Switch
-              checked={settings.mathRenderingEnabled}
-              onCheckedChange={(checked) =>
-                updateSettings({ mathRenderingEnabled: Boolean(checked) })
-              }
+              checked={!settings.mathRenderingDisabled}
+              onCheckedChange={(checked) => updateSettings({ mathRenderingDisabled: !checked })}
               aria-label="Render math"
             />
           }

@@ -289,7 +289,7 @@ export function AppearancePreferencesProvider(props: { readonly children: ReactN
     updatePreferences({ codeWordBreak: value });
   };
 
-  const mathRenderingEnabled = storedPreferences?.mathRenderingEnabled === true;
+  const mathRenderingEnabled = storedPreferences?.mathRenderingEnabled !== false;
   const setMathRenderingEnabled = (value: boolean) =>
     updatePreferences({ mathRenderingEnabled: value });
 

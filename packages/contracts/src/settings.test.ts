@@ -214,6 +214,22 @@ describe("ClientSettings quit confirmation", () => {
   });
 });
 
+describe("ClientSettings math rendering", () => {
+  it("stays on for installs that persisted the old opt-in default", () => {
+    const settings = decodeClientSettings({ mathRenderingEnabled: false });
+
+    expect(settings.mathRenderingDisabled).toBe(false);
+    expect(encodeClientSettings(settings)).not.toHaveProperty("mathRenderingEnabled");
+  });
+
+  it("lets users turn it off", () => {
+    expect(decodeClientSettings({ mathRenderingDisabled: true }).mathRenderingDisabled).toBe(true);
+    expect(decodeClientSettingsPatch({ mathRenderingDisabled: true })).toEqual({
+      mathRenderingDisabled: true,
+    });
+  });
+});
+
 describe("ClientSettings browser recording frame rate", () => {
   it("defaults to 30 fps", () => {
     expect(decodeClientSettings({}).browserRecordingFrameRate).toBe(30);

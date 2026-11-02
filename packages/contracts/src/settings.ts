@@ -134,9 +134,9 @@ const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
 
 export const WallpaperMode = Schema.Literals(["none", "preset", "custom"]);
 export type WallpaperMode = typeof WallpaperMode.Type;
-export const DEFAULT_WALLPAPER_MODE: WallpaperMode = "none";
+const DEFAULT_WALLPAPER_MODE: WallpaperMode = "none";
 
-export const WALLPAPER_PRESETS = [
+const WALLPAPER_PRESETS = [
   "cyberpunk-kowloon",
   "synthwave-sunset",
   "lofi-rain",
@@ -145,7 +145,7 @@ export const WALLPAPER_PRESETS = [
 ] as const;
 export const WallpaperPreset = Schema.Literals(WALLPAPER_PRESETS);
 export type WallpaperPreset = typeof WallpaperPreset.Type;
-export const DEFAULT_WALLPAPER_PRESET: WallpaperPreset = "cyberpunk-kowloon";
+const DEFAULT_WALLPAPER_PRESET: WallpaperPreset = "cyberpunk-kowloon";
 
 export const MIN_WALLPAPER_OPACITY = 10;
 export const MAX_WALLPAPER_OPACITY = 100;
@@ -156,7 +156,7 @@ export const WallpaperOpacity = Schema.Int.check(
   }),
 );
 export type WallpaperOpacity = typeof WallpaperOpacity.Type;
-export const DEFAULT_WALLPAPER_OPACITY: WallpaperOpacity = 70;
+const DEFAULT_WALLPAPER_OPACITY: WallpaperOpacity = 70;
 
 export const MIN_WALLPAPER_BLUR = 0;
 export const MAX_WALLPAPER_BLUR = 20;
@@ -167,7 +167,7 @@ export const WallpaperBlur = Schema.Int.check(
   }),
 );
 export type WallpaperBlur = typeof WallpaperBlur.Type;
-export const DEFAULT_WALLPAPER_BLUR: WallpaperBlur = 0;
+const DEFAULT_WALLPAPER_BLUR: WallpaperBlur = 0;
 
 export const MIN_WALLPAPER_MESSAGE_OPACITY = 0;
 export const MAX_WALLPAPER_MESSAGE_OPACITY = 100;
@@ -178,18 +178,12 @@ export const WallpaperMessageOpacity = Schema.Int.check(
   }),
 );
 export type WallpaperMessageOpacity = typeof WallpaperMessageOpacity.Type;
-export const DEFAULT_WALLPAPER_MESSAGE_OPACITY: WallpaperMessageOpacity = 45;
+const DEFAULT_WALLPAPER_MESSAGE_OPACITY: WallpaperMessageOpacity = 45;
 
-export const RETRO_FONT_PRESETS = [
-  "none",
-  "vt323",
-  "press-start",
-  "silkscreen",
-  "retro-code",
-] as const;
+const RETRO_FONT_PRESETS = ["none", "vt323", "press-start", "silkscreen", "retro-code"] as const;
 export const RetroFontPreset = Schema.Literals(RETRO_FONT_PRESETS);
 export type RetroFontPreset = typeof RetroFontPreset.Type;
-export const DEFAULT_RETRO_FONT_PRESET: RetroFontPreset = "none";
+const DEFAULT_RETRO_FONT_PRESET: RetroFontPreset = "none";
 
 export const MIN_APPEARANCE_CONTRAST = 50;
 export const MAX_APPEARANCE_CONTRAST = 200;
@@ -599,9 +593,9 @@ export const ClientSettingsSchema = Schema.Struct({
   snapShotFlash: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   snapShotAnimations: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   wordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
-  // Opt-in TeX typesetting in rendered Markdown. Off keeps math parsing and
-  // KaTeX out of the render path entirely.
-  mathRenderingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  // TeX typesetting in rendered Markdown is on unless the user turns it off.
+  // Opt-out so installs that persisted the old opt-in default keep rendering math.
+  mathRenderingDisabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
@@ -1836,6 +1830,6 @@ export const ClientSettingsPatch = Schema.Struct({
   snapShotFlash: Schema.optionalKey(Schema.Boolean),
   snapShotAnimations: Schema.optionalKey(Schema.Boolean),
   wordWrap: Schema.optionalKey(Schema.Boolean),
-  mathRenderingEnabled: Schema.optionalKey(Schema.Boolean),
+  mathRenderingDisabled: Schema.optionalKey(Schema.Boolean),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;

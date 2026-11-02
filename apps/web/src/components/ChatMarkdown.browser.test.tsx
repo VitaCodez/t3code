@@ -62,7 +62,7 @@ vi.mock(import("./chat/MermaidDiagram"), async (original) => {
   };
 });
 
-const settingsOverrides = vi.hoisted(() => ({ mathRenderingEnabled: false }));
+const settingsOverrides = vi.hoisted(() => ({ mathRenderingDisabled: true }));
 vi.mock(import("../hooks/useSettings"), async (original) => {
   const actual = await original();
   type Settings = ReturnType<typeof actual.getClientSettings>;
@@ -99,7 +99,7 @@ it("keeps compact audio playback loaded across signed URL renewals", async () =>
 });
 
 function setup() {
-  settingsOverrides.mathRenderingEnabled = false;
+  settingsOverrides.mathRenderingDisabled = true;
   renderDiagram.mockReset();
   workspaceSearch.mockReset().mockResolvedValue(AsyncResult.success({ entries: [] }));
   filesystemMetadata.mockReset().mockResolvedValue(AsyncResult.success({ entries: [null] }));
