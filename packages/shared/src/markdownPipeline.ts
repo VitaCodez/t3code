@@ -360,8 +360,6 @@ function remarkBreakAroundImageLines() {
   };
 }
 
-export const CHAT_MARKDOWN_REHYPE_PLUGINS: PluggableList = createChatMarkdownRehypePlugins();
-
 type MarkdownAstNode = {
   type?: string;
   meta?: unknown;
