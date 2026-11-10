@@ -4,7 +4,7 @@ import {
   androidWorkspaceTabFromNavigationState,
   androidWorkspaceTabNavigationState,
   type AndroidWorkspaceNavigationTab,
-} from "../features/workspace/android-workspace-tabs";
+} from "../features/layout/workspace/android-workspace-tabs";
 import {
   linkedThreadStep,
   parentThreadIsBelow,

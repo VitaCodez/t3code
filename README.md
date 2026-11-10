@@ -1,4 +1,4 @@
-# T3 Code currect version: v0.1.5
+# T3 Code current version: v0.1.8
 
 > [!IMPORTANT]
 > **Fork & Attribution Notice:**  
@@ -29,6 +29,7 @@ T3 Code connects directly to the providers you already use. There are no subscri
 - **Pi**: Gemini 3.5 Flash, Gemini 3.5 Pro
 - **Grok**: Grok 4
 - **Cursor**: Use models from your Cursor plan inside T3 Code
+- **fx**: Use models from your fx plan inside T3 Code. Install [fx](https://fx.sh) and run `fx login` on the machine running the T3 Code server ([setup guide](./docs/user/providers-fx.md))
 
 ### Features
 
