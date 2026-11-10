@@ -1,9 +1,4 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
-import * as Option from "effect/Option";
-
-import { useProject, useQuietThreadShell } from "./entities";
-import { useEnvironmentThread } from "./threads";
-import { useSelectedThreadWorktreePath, useThreadWorktreePath } from "./use-thread-detail";
+import { useSelectedThreadWorktreePath } from "./use-thread-detail";
 import { useThreadSelection } from "./use-thread-selection";
 import { resolvePreferredThreadWorktreePath } from "../features/terminal/terminalLaunchContext";
 
