@@ -10,12 +10,17 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 
 import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopClientSettings from "./DesktopClientSettings.ts";
+
+const encodeClientSettingsJson = Schema.encodeEffect(
+  Schema.fromJsonString(ClientSettingsSchema),
+);
 
 const clientSettings: ClientSettings = {
   ...DEFAULT_CLIENT_SETTINGS,
@@ -119,7 +124,7 @@ const withClientSettings = <A, E, R>(
       prefix: "t3-desktop-client-settings-test-",
     });
     return yield* effect.pipe(Effect.provide(layer(baseDir)));
-  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)), Effect.scoped);
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)));
 
 describe("DesktopClientSettings", () => {
   it.effect("saves through a symlinked client settings file without replacing the link", () =>
@@ -131,7 +136,8 @@ describe("DesktopClientSettings", () => {
         const dotfiles = yield* fileSystem.makeTempDirectoryScoped({
           prefix: "t3-desktop-client-settings-dotfiles-",
         });
-        const linkedSettingsPath = `${dotfiles}/client-settings.json`;
+        const path = yield* Path.Path;
+        const linkedSettingsPath = path.join(dotfiles, "client-settings.json");
         yield* fileSystem.writeFileString(linkedSettingsPath, "{}\n");
         yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
         yield* fileSystem.symlink(linkedSettingsPath, environment.clientSettingsPath);
@@ -233,7 +239,7 @@ describe("DesktopClientSettings", () => {
         yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
         yield* fileSystem.writeFileString(
           environment.clientSettingsPath,
-          `{\n            // Matches server settings parsing.\n            \"timestampFormat\": \"24-hour\",\n          }\n`,
+          `{\n            // Matches server settings parsing.\n            "timestampFormat": "24-hour",\n          }\n`,
         );
 
         const persisted = yield* settings.get;
@@ -254,7 +260,7 @@ describe("DesktopClientSettings", () => {
         yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
         yield* fileSystem.writeFileString(
           environment.clientSettingsPath,
-          `{\n            \"settings\": {\n              \"timestampFormat\": \"12-hour\"\n            }\n          }\n`,
+          `{\n            "settings": {\n              "timestampFormat": "12-hour"\n            }\n          }\n`,
         );
 
         const persisted = yield* settings.get;
@@ -307,9 +313,7 @@ describe("DesktopClientSettings", () => {
           };
 
           yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
-          const jsonString = yield* Schema.encodeEffect(
-            Schema.fromJsonString(ClientSettingsSchema),
-          )(settingsWithLargeWallpaper);
+          const jsonString = yield* encodeClientSettingsJson(settingsWithLargeWallpaper);
           yield* fileSystem.writeFileString(environment.clientSettingsPath, jsonString);
 
           const loaded = yield* settings.get;
